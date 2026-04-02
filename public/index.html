@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>Claude Remote</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <button class="header-menu-btn" id="menuBtn" aria-label="Menu">&#9776;</button>
+    <div class="header-title" id="headerTitle">Claude Remote</div>
+    <div class="connection-dot" id="connectionDot" title="Disconnected"></div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar" id="statusBar"></div>
+
+  <!-- Chat area -->
+  <div class="chat-area" id="chatArea">
+    <div class="welcome" id="welcome">
+      <img src="/icons/icon-192.svg" class="welcome-logo" alt="Claude Remote">
+      <h1>Claude Remote</h1>
+      <p>Control Claude Code on your desktop from your phone. Send a message to start a new session, or tap &#9776; to browse existing sessions.</p>
+    </div>
+  </div>
+
+  <!-- Typing indicator -->
+  <div class="typing-indicator" id="typingIndicator">
+    <span></span><span></span><span></span>
+  </div>
+
+  <!-- Input area -->
+  <div class="input-area">
+    <textarea
+      class="input-field"
+      id="inputField"
+      placeholder="Message Claude Code..."
+      rows="1"
+      autocomplete="off"
+      autocorrect="on"
+    ></textarea>
+    <button class="send-btn" id="sendBtn" aria-label="Send">&#9654;</button>
+  </div>
+</div>
+
+<!-- Sidebar overlay -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h2>Sessions</h2>
+    <button class="new-session-btn" id="newSessionBtn">+ New</button>
+  </div>
+  <div class="session-list" id="sessionList">
+    <div class="loading-sessions">Loading sessions...</div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
