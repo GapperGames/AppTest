@@ -113,29 +113,50 @@ process.on('SIGTERM', () => {
 
 // --- Start server ---
 
-function getLocalIP() {
+function getLocalIPs() {
   const interfaces = os.networkInterfaces();
+  const ips = [];
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
+        ips.push({ name, address: iface.address });
       }
     }
   }
-  return 'localhost';
+  // Prefer 192.168.x.x (typical home WiFi), then 10.x.x.x, then others
+  ips.sort((a, b) => {
+    const score = (ip) => {
+      if (ip.startsWith('192.168.')) return 0;
+      if (ip.startsWith('10.')) return 1;
+      if (ip.startsWith('172.')) return 2;
+      return 3;
+    };
+    return score(a.address) - score(b.address);
+  });
+  return ips;
 }
 
 server.listen(PORT, '0.0.0.0', () => {
-  const ip = getLocalIP();
+  const ips = getLocalIPs();
+  const bestIP = ips.length > 0 ? ips[0].address : 'localhost';
+
   console.log('');
-  console.log('  ╔═══════════════════════════════════════════╗');
-  console.log('  ║         Claude Remote is running!         ║');
-  console.log('  ╠═══════════════════════════════════════════╣');
-  console.log(`  ║  Local:   http://localhost:${PORT}          ║`);
-  console.log(`  ║  Phone:   http://${ip}:${PORT}    ║`);
-  console.log('  ╠═══════════════════════════════════════════╣');
-  console.log('  ║  Open the Phone URL on your mobile to     ║');
-  console.log('  ║  install the app (Add to Home Screen)     ║');
-  console.log('  ╚═══════════════════════════════════════════╝');
+  console.log('  Claude Remote is running!');
+  console.log('  ========================');
+  console.log('');
+  console.log(`  Local:  http://localhost:${PORT}`);
+  console.log('');
+  if (ips.length > 0) {
+    console.log('  Phone URLs (try these on your phone):');
+    for (const ip of ips) {
+      const star = ip.address === bestIP ? ' <-- most likely this one' : '';
+      console.log(`    http://${ip.address}:${PORT}  (${ip.name})${star}`);
+    }
+  } else {
+    console.log(`  Phone:  http://${bestIP}:${PORT}`);
+  }
+  console.log('');
+  console.log('  Open the Phone URL on your mobile to');
+  console.log('  install the app (Add to Home Screen)');
   console.log('');
 });
