@@ -19,7 +19,6 @@ import com.poolsight.geometry.GameType
 import com.poolsight.geometry.ShotProblem
 import com.poolsight.geometry.ShotResult
 import com.poolsight.geometry.ShotSolver
-import com.poolsight.geometry.Table
 import com.poolsight.geometry.TableFrame
 import com.poolsight.geometry.Vec2
 import com.poolsight.geometry.Vec3
@@ -28,25 +27,35 @@ import com.poolsight.vision.BallTracker
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.cos
 import kotlin.math.sin
-import javax.microedition.khronos.egl.EGLConfig
-import javax.microedition.khronos.opengles.GL10
+
+/** Which tab the user is on. TABLE = set up the table; PLAY = aim shots. */
+enum class UiMode { TABLE, PLAY }
 
 /**
- * GL renderer, Phase 1: camera background + tap-to-calibrate table setup.
+ * GL renderer for the whole PoolSight flow.
  *
- * Flow: find a horizontal surface (Phase 0) → user taps the four inside
- * corners of the cushions → a [TableFrame] is fitted from the tapped points
- * (metric, thanks to ARCore) → the table outline, a grid, and the six pocket
- * positions are drawn hugging the cloth. The grid lying flat on the real
- * table is the Phase 1 acceptance test.
+ * TABLE tab: tap two diagonally opposite pocket corners; the 2:1 playing
+ * surface is reconstructed from the diagonal (⇄ Flip resolves the mirror
+ * ambiguity). Grid + pockets drawn as proof of lock.
+ *
+ * PLAY tab: balls detected and marked, tap a ball + a pocket, press
+ * "Create shot" to draw the aim line / ghost ball / contact spot / path.
+ * Freeze locks the overlay for taking the shot.
  */
 class ArRenderer(
     context: Context,
     private val onStatus: (String) -> Unit,
+    private val onCalibrated: () -> Unit,
 ) : GLSurfaceView.Renderer {
 
     @Volatile
     var session: Session? = null
+
+    @Volatile
+    var uiMode = UiMode.TABLE
+
+    @Volatile
+    var frozen = false
 
     val displayRotationHelper = DisplayRotationHelper(context)
 
@@ -58,46 +67,64 @@ class ArRenderer(
     private val viewMatrix = FloatArray(16)
     private val projectionMatrix = FloatArray(16)
     private val viewProjection = FloatArray(16)
+    private val inverseViewProjection = FloatArray(16)
+    private val scratch4 = FloatArray(4)
+    private val scratch4b = FloatArray(4)
+    private var viewportWidth = 1
+    private var viewportHeight = 1
 
-    // --- calibration state (GL thread only, except the queues/flags) ---
+    // --- cross-thread requests (UI thread writes, GL thread consumes) ---
     private val pendingTaps = ConcurrentLinkedQueue<FloatArray>()
     @Volatile
     private var resetRequested = false
+    @Volatile
+    private var flipRequested = false
+    @Volatile
+    private var shotRequestPending = false
 
-    private val cornerAnchors = mutableListOf<Anchor>()
+    // --- calibration state (GL thread) ---
+    private val cornerAnchors = mutableListOf<Anchor>() // max 2: diagonal corners
+    private var diagonalMirrored = false
     private var tableFrame: TableFrame? = null
+    private var everCalibrated = false
     private var gameType = GameType.POOL
 
-    // --- ball detection (Phase 2) ---
+    // --- ball detection ---
     private val detector = BallDetector()
     private val tracker = BallTracker()
     private var trackedBalls: List<BallTracker.TrackedBall> = emptyList()
     private var lastDetectionSubmitMs = 0L
-    private var viewportWidth = 1
-    private var viewportHeight = 1
-    private val inverseViewProjection = FloatArray(16)
-    private val scratch4 = FloatArray(4)
-    private val scratch4b = FloatArray(4)
 
-    // --- shot selection & freeze (Phases 3+4) ---
+    // --- shot state ---
     private var selectedBallId: Int? = null
     private var selectedPocketIndex: Int? = null
-    @Volatile
-    var frozen = false
+    private var shotActive = false
 
     private var lastStatus = ""
+    private var transientStatus: String? = null
+    private var transientStatusUntilMs = 0L
 
-    /** Screen tap from the UI thread; consumed on the GL thread. */
+    // ---- UI-thread API ---------------------------------------------------------
+
     fun onTap(x: Float, y: Float) {
         pendingTaps.add(floatArrayOf(x, y))
     }
 
-    /** Restart corner calibration (UI thread). */
     fun requestReset() {
         resetRequested = true
     }
 
-    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+    fun requestFlip() {
+        flipRequested = true
+    }
+
+    fun requestShot() {
+        shotRequestPending = true
+    }
+
+    // ---- GLSurfaceView.Renderer -------------------------------------------------
+
+    override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
         GLES20.glClearColor(0.05f, 0.05f, 0.05f, 1f)
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
@@ -106,14 +133,14 @@ class ArRenderer(
         lines.createOnGlThread()
     }
 
-    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+    override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
         displayRotationHelper.onSurfaceChanged(width, height)
         GLES20.glViewport(0, 0, width, height)
         viewportWidth = width
         viewportHeight = height
     }
 
-    override fun onDrawFrame(gl: GL10?) {
+    override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         val session = session ?: return
 
@@ -127,11 +154,14 @@ class ArRenderer(
                 resetRequested = false
                 clearCalibration()
             }
+            if (flipRequested) {
+                flipRequested = false
+                diagonalMirrored = !diagonalMirrored
+            }
 
             val camera = frame.camera
             if (camera.trackingState != TrackingState.TRACKING) {
                 pendingTaps.clear()
-                // Say WHY tracking is struggling, not just "move the phone".
                 report(
                     when (camera.trackingFailureReason) {
                         TrackingFailureReason.INSUFFICIENT_LIGHT ->
@@ -157,26 +187,33 @@ class ArRenderer(
             val frameNow = tableFrame
             if (frameNow != null) {
                 android.opengl.Matrix.invertM(inverseViewProjection, 0, viewProjection, 0)
-                if (!frozen) {
-                    ingestDetections(frame, frameNow)
-                    maybeSubmitDetection(frame, frameNow)
-                }
 
                 drawTable(frameNow)
-                drawBalls(frameNow)
-                val shotStatus = solveAndDrawShot(frameNow)
+                drawPockets(frameNow)
 
-                val dims = String.format("%.2f m × %.2f m", frameNow.widthMm / 1000.0, frameNow.lengthMm / 1000.0)
-                val base = currentTransient() ?: shotStatus ?: if (trackedBalls.isEmpty()) {
-                    appContext.getString(R.string.status_table_locked, dims)
+                if (uiMode == UiMode.PLAY) {
+                    if (!frozen) {
+                        ingestDetections(frame, frameNow)
+                        maybeSubmitDetection(frame, frameNow)
+                    }
+                    drawBalls(frameNow)
+                    val playStatus = drawPlayOverlays(frameNow)
+                    val base = currentTransient() ?: playStatus
+                    report(if (frozen) appContext.getString(R.string.frozen_status, base) else base)
                 } else {
-                    appContext.getString(R.string.status_balls_seen, dims, trackedBalls.size)
+                    val dims = dimsText(frameNow)
+                    report(
+                        currentTransient()
+                            ?: appContext.getString(R.string.status_table_locked_table_tab, dims),
+                    )
                 }
-                report(if (frozen) appContext.getString(R.string.frozen_status, base) else base)
             } else {
                 report(
-                    currentTransient()
-                        ?: appContext.getString(R.string.status_tap_corner, cornerAnchors.size + 1),
+                    currentTransient() ?: when {
+                        uiMode == UiMode.PLAY -> appContext.getString(R.string.status_play_not_calibrated)
+                        cornerAnchors.isEmpty() -> appContext.getString(R.string.status_diag_first)
+                        else -> appContext.getString(R.string.status_diag_second)
+                    },
                 )
             }
         } catch (e: CameraNotAvailableException) {
@@ -187,63 +224,115 @@ class ArRenderer(
         }
     }
 
-    // ---- calibration ---------------------------------------------------------
+    // ---- taps -------------------------------------------------------------------
 
     private fun handleTaps(frame: Frame) {
         while (true) {
             val tap = pendingTaps.poll() ?: return
-            if (cornerAnchors.size >= 4) {
-                // Calibrated: taps select the ball to pot, then the pocket.
-                if (!frozen) tableFrame?.let { handleSelectionTap(tap, it) }
-                continue
+            when (uiMode) {
+                UiMode.TABLE -> handleCornerTap(tap, frame)
+                UiMode.PLAY -> {
+                    val table = tableFrame ?: continue
+                    if (!frozen) handleSelectionTap(tap, table)
+                }
             }
-
-            // Prefer a proper plane hit, but pool cloth is often too
-            // featureless for ARCore to ever produce a Plane — depth points
-            // (S22+ has depth support) and feature points work fine, since
-            // the corner fit only needs four 3D positions and validates the
-            // shape itself.
-            val hits = frame.hitTest(tap[0], tap[1])
-            val hit = hits.firstOrNull { h ->
-                val plane = h.trackable as? Plane ?: return@firstOrNull false
-                plane.type == Plane.Type.HORIZONTAL_UPWARD_FACING &&
-                    plane.trackingState == TrackingState.TRACKING &&
-                    plane.isPoseInPolygon(h.hitPose)
-            }
-                ?: hits.firstOrNull { it.trackable is DepthPoint }
-                ?: hits.firstOrNull { it.trackable is Point }
-
-            if (hit == null) {
-                setTransient(appContext.getString(R.string.status_tap_missed))
-                continue
-            }
-
-            val position = hit.hitPose.toVec3()
-            // Ignore accidental double-taps on an existing corner.
-            if (cornerAnchors.any { it.pose.toVec3().distanceTo(position) < MIN_CORNER_SPACING_M }) continue
-
-            cornerAnchors.add(hit.createAnchor())
         }
     }
 
+    private fun handleCornerTap(tap: FloatArray, frame: Frame) {
+        if (cornerAnchors.size >= 2) {
+            setTransient(appContext.getString(R.string.status_table_locked_hint))
+            return
+        }
+
+        // Prefer a proper plane hit, but pool cloth is often too featureless
+        // for ARCore to ever produce a Plane — depth points (the S22+ has
+        // depth support) and feature points work fine, since the diagonal
+        // fit validates the geometry itself.
+        val hits = frame.hitTest(tap[0], tap[1])
+        val hit = hits.firstOrNull { h ->
+            val plane = h.trackable as? Plane ?: return@firstOrNull false
+            plane.type == Plane.Type.HORIZONTAL_UPWARD_FACING &&
+                plane.trackingState == TrackingState.TRACKING &&
+                plane.isPoseInPolygon(h.hitPose)
+        }
+            ?: hits.firstOrNull { it.trackable is DepthPoint }
+            ?: hits.firstOrNull { it.trackable is Point }
+
+        if (hit == null) {
+            setTransient(appContext.getString(R.string.status_tap_missed))
+            return
+        }
+
+        val position = hit.hitPose.toVec3()
+        if (cornerAnchors.any { it.pose.toVec3().distanceTo(position) < MIN_CORNER_SPACING_M }) {
+            setTransient(appContext.getString(R.string.status_diag_second))
+            return
+        }
+        cornerAnchors.add(hit.createAnchor())
+    }
+
+    /** Tap on the calibrated table (PLAY): pick the object ball or the pocket. */
+    private fun handleSelectionTap(tap: FloatArray, table: TableFrame) {
+        val ndcX = 2f * tap[0] / viewportWidth - 1f
+        val ndcY = 1f - 2f * tap[1] / viewportHeight
+        val (origin, dir) = unprojectRay(ndcX, ndcY) ?: return
+        val tapPos = table.ballCenterFromRay(origin, dir, gameType.ballRadiusMm, marginMm = 250.0) ?: return
+
+        // A tracked ball near the tap → object ball (pocket selection kept).
+        val ball = trackedBalls.minByOrNull { it.position.distanceTo(tapPos) }
+        if (ball != null && ball.position.distanceTo(tapPos) < BALL_PICK_MM) {
+            if (ball.appearance.ballClass == BallClass.CUE) {
+                setTransient(appContext.getString(R.string.status_thats_cue))
+            } else {
+                selectedBallId = ball.id
+                shotActive = false
+            }
+            return
+        }
+
+        // A pocket near the tap → target pocket (ball selection kept).
+        val pockets = table.table(gameType).pockets
+        val nearest = pockets.withIndex().minByOrNull { it.value.center.distanceTo(tapPos) }
+        if (nearest != null && nearest.value.center.distanceTo(tapPos) < POCKET_PICK_MM) {
+            selectedPocketIndex = nearest.index
+            shotActive = false
+            return
+        }
+
+        // Empty felt: clear everything.
+        selectedBallId = null
+        selectedPocketIndex = null
+        shotActive = false
+    }
+
+    // ---- calibration --------------------------------------------------------------
+
     /**
-     * (Re)fit the table frame from the corner anchors every frame — anchors
-     * drift-correct as ARCore refines its map, and refitting keeps the grid
-     * glued to the improved positions. Cheap: four points of vector maths.
+     * (Re)fit the table from the two diagonal anchors every frame — anchors
+     * drift-correct as ARCore refines its map, and the mirror flag is applied
+     * live so ⇄ Flip takes effect instantly.
      */
     private fun refitTableIfReady() {
-        if (cornerAnchors.size < 4) {
+        if (cornerAnchors.size < 2) {
             tableFrame = null
             return
         }
-        val corners = cornerAnchors.map { it.pose.toVec3() }
-        val fitted = TableFrame.fitFromCorners(corners)
+        val fitted = TableFrame.fitFromDiagonal(
+            cornerAnchors[0].pose.toVec3(),
+            cornerAnchors[1].pose.toVec3(),
+            diagonalMirrored,
+        )
         if (fitted == null) {
-            // Corners don't form a plausible rectangle: start over.
             clearCalibration()
-            report(appContext.getString(R.string.status_bad_rectangle))
+            setTransient(appContext.getString(R.string.status_bad_diagonal))
         } else {
+            val first = tableFrame == null && !everCalibrated
             tableFrame = fitted
+            if (first) {
+                everCalibrated = true
+                onCalibrated()
+            }
         }
     }
 
@@ -251,96 +340,73 @@ class ArRenderer(
         cornerAnchors.forEach { it.detach() }
         cornerAnchors.clear()
         tableFrame = null
+        diagonalMirrored = false
         tracker.clear()
         trackedBalls = emptyList()
         selectedBallId = null
         selectedPocketIndex = null
+        shotActive = false
         frozen = false
     }
 
-    // ---- shot selection & aiming overlay (Phases 3+4) --------------------------
-
-    /** Tap on the calibrated table: pick the object ball, then the pocket. */
-    private fun handleSelectionTap(tap: FloatArray, table: TableFrame) {
-        val ndcX = 2f * tap[0] / viewportWidth - 1f
-        val ndcY = 1f - 2f * tap[1] / viewportHeight
-        val (origin, dir) = unprojectRay(ndcX, ndcY) ?: return
-        val tapPos = table.ballCenterFromRay(origin, dir, gameType.ballRadiusMm, marginMm = 250.0) ?: return
-
-        // A tracked ball near the tap → select it as the object ball.
-        val ball = trackedBalls.minByOrNull { it.position.distanceTo(tapPos) }
-        if (ball != null && ball.position.distanceTo(tapPos) < BALL_PICK_MM) {
-            if (ball.appearance.ballClass == BallClass.CUE) {
-                setTransient(appContext.getString(R.string.status_thats_cue))
-            } else {
-                selectedBallId = ball.id
-                selectedPocketIndex = null
-            }
-            return
-        }
-
-        // A pocket near the tap (with a ball already chosen) → set the target.
-        if (selectedBallId != null) {
-            val pockets = table.table(gameType).pockets
-            val nearest = pockets.withIndex().minByOrNull { it.value.center.distanceTo(tapPos) }
-            if (nearest != null && nearest.value.center.distanceTo(tapPos) < POCKET_PICK_MM) {
-                selectedPocketIndex = nearest.index
-                return
-            }
-        }
-
-        // Empty felt: clear the shot.
-        selectedBallId = null
-        selectedPocketIndex = null
-    }
-
-    /** One-shot status hint (e.g. "that's the cue ball"), shown for a moment. */
-    private var transientStatus: String? = null
-    private var transientStatusUntilMs = 0L
-
-    private fun setTransient(message: String) {
-        transientStatus = message
-        transientStatusUntilMs = SystemClock.uptimeMillis() + 2500
-    }
-
-    private fun currentTransient(): String? {
-        if (SystemClock.uptimeMillis() >= transientStatusUntilMs) return null
-        return transientStatus
-    }
+    // ---- PLAY overlays --------------------------------------------------------------
 
     /**
-     * Solve the selected shot against current ball positions and draw the
-     * overlay. Returns the status line to show, or null when no shot is
-     * in progress.
+     * Selection outlines, shot solving/drawing. Returns the status line.
      */
-    private fun solveAndDrawShot(table: TableFrame): String? {
-        val objectId = selectedBallId ?: return null
-        val objectBall = trackedBalls.firstOrNull { it.id == objectId }
-        if (objectBall == null) {
-            selectedBallId = null
-            selectedPocketIndex = null
-            return null
+    private fun drawPlayOverlays(table: TableFrame): String {
+        // Consume a "Create shot" press.
+        if (shotRequestPending) {
+            shotRequestPending = false
+            if (selectedBallId != null && selectedPocketIndex != null) {
+                shotActive = true
+            } else {
+                setTransient(appContext.getString(R.string.hint_need_selection))
+            }
         }
 
-        // Highlight the selected ball.
-        drawMarkerRing(table, objectBall.position, 1f, 0.85f, 0.2f, 30.0)
+        val objectBall = selectedBallId?.let { id -> trackedBalls.firstOrNull { it.id == id } }
+        if (selectedBallId != null && objectBall == null) {
+            // Selected ball vanished (potted/lost): clear the shot.
+            selectedBallId = null
+            shotActive = false
+        }
 
-        val pocketIdx = selectedPocketIndex ?: return appContext.getString(R.string.status_select_pocket)
+        // Outline the selected ball (amber ring).
+        objectBall?.let {
+            drawCircle(table, it.position, gameType.ballRadiusMm + 25.0, 1f, 0.85f, 0.2f, 0.95f)
+        }
+        // The selected pocket gets its highlight in drawPockets().
 
+        if (!shotActive) {
+            return when {
+                objectBall == null && trackedBalls.isEmpty() ->
+                    appContext.getString(R.string.status_no_balls)
+                objectBall == null ->
+                    appContext.getString(R.string.status_tap_ball, trackedBalls.size)
+                selectedPocketIndex == null ->
+                    appContext.getString(R.string.status_tap_pocket_next)
+                else ->
+                    appContext.getString(R.string.status_press_create)
+            }
+        }
+
+        // --- shot is active: solve against current positions and draw ---
+        val obj = objectBall ?: return appContext.getString(R.string.status_tap_ball, trackedBalls.size)
+        val pocketIdx = selectedPocketIndex ?: return appContext.getString(R.string.status_tap_pocket_next)
         val cue = trackedBalls.firstOrNull { it.appearance.ballClass == BallClass.CUE }
             ?: return appContext.getString(R.string.status_no_cue)
 
         val gameTable = table.table(gameType)
-        val pocket = gameTable.pockets[pocketIdx]
         val solver = ShotSolver(gameTable)
+        val pocket = gameTable.pockets[pocketIdx]
 
         val cueBall = Ball("cue", cue.position)
-        val objBall = Ball("obj", objectBall.position)
+        val objBall = Ball("obj", obj.position)
         val others = trackedBalls
-            .filter { it.id != objectId && it.id != cue.id }
+            .filter { it.id != obj.id && it.id != cue.id }
             .map { Ball(it.id.toString(), it.position) }
 
-        // Direct first; fall back to the best bank.
         val direct = solver.solveDirect(cueBall, objBall, pocket, others)
         val solution = direct as? ShotResult.Solution
             ?: solver.solveAll(cueBall, objBall, pocket, others).firstOrNull()
@@ -381,6 +447,88 @@ class ArRenderer(
 
         // Contact spot on the object ball.
         drawMarkerDot(table, shot.contactPoint, 1f, 0.3f, 0.25f, 16f)
+    }
+
+    // ---- drawing helpers -----------------------------------------------------------
+
+    private fun drawCornerMarkers() {
+        if (cornerAnchors.isEmpty()) return
+        val positions = FloatArray(cornerAnchors.size * 3)
+        cornerAnchors.forEachIndexed { i, anchor ->
+            val t = anchor.pose.translation
+            positions[i * 3] = t[0]
+            positions[i * 3 + 1] = t[1]
+            positions[i * 3 + 2] = t[2]
+        }
+        points.draw(viewProjection, positions, cornerAnchors.size, red = 0.95f, green = 0.7f, blue = 0.25f, pointSizePx = 44f)
+    }
+
+    private fun drawTable(frame: TableFrame) {
+        val w = frame.widthMm
+        val l = frame.lengthMm
+
+        val segments = mutableListOf<Pair<Vec2, Vec2>>()
+        segments += Vec2(0.0, 0.0) to Vec2(w, 0.0)
+        segments += Vec2(w, 0.0) to Vec2(w, l)
+        segments += Vec2(w, l) to Vec2(0.0, l)
+        segments += Vec2(0.0, l) to Vec2(0.0, 0.0)
+
+        var x = GRID_STEP_MM
+        while (x < w) {
+            segments += Vec2(x, 0.0) to Vec2(x, l)
+            x += GRID_STEP_MM
+        }
+        var y = GRID_STEP_MM
+        while (y < l) {
+            segments += Vec2(0.0, y) to Vec2(w, y)
+            y += GRID_STEP_MM
+        }
+
+        val vertices = FloatArray(segments.size * 2 * 3)
+        segments.forEachIndexed { i, (a, b) ->
+            frame.toWorld(a).into(vertices, i * 6)
+            frame.toWorld(b).into(vertices, i * 6 + 3)
+        }
+
+        // Chalk-blue grid, slightly transparent; bold outline drawn on top.
+        lines.draw(viewProjection, vertices, segments.size * 2, red = 0.35f, green = 0.75f, blue = 0.85f, alpha = 0.45f, widthPx = 4f)
+        lines.draw(viewProjection, vertices, 8, red = 0.35f, green = 0.85f, blue = 0.95f, alpha = 0.95f, widthPx = 8f)
+    }
+
+    /** Pocket rings at the six derived positions; selected pocket highlighted. */
+    private fun drawPockets(frame: TableFrame) {
+        val pockets = frame.table(gameType).pockets
+        pockets.forEachIndexed { i, pocket ->
+            val selected = uiMode == UiMode.PLAY && i == selectedPocketIndex
+            if (selected) {
+                drawCircle(frame, pocket.center, POCKET_RING_MM + 15.0, 1f, 0.85f, 0.2f, 1f)
+            }
+            drawCircle(frame, pocket.center, POCKET_RING_MM, 0.95f, 0.95f, 0.95f, if (selected) 0.9f else 0.55f)
+            drawMarkerDot(frame, pocket.center, 0.08f, 0.08f, 0.08f, 30f)
+        }
+    }
+
+    /** Colour-coded dot per tracked ball; the cue ball gets a white ring. */
+    private fun drawBalls(table: TableFrame) {
+        val balls = trackedBalls
+        if (balls.isEmpty()) return
+        val up = table.upNormal
+        val lift = gameType.ballRadiusMm / 1000.0
+
+        val position = FloatArray(3)
+        for (ball in balls) {
+            val world = table.toWorld(ball.position) + up * lift
+            world.into(position, 0)
+            val rgb = ball.appearance.displayRgb
+            points.draw(
+                viewProjection, position, 1,
+                red = rgb[0], green = rgb[1], blue = rgb[2],
+                pointSizePx = 38f,
+            )
+            if (ball.appearance.ballClass == BallClass.CUE) {
+                drawCircle(table, ball.position, gameType.ballRadiusMm + 12.0, 1f, 1f, 1f, 0.9f)
+            }
+        }
     }
 
     private fun dashSegments(a: Vec2, b: Vec2, dashMm: Double = 60.0, gapMm: Double = 45.0): List<Pair<Vec2, Vec2>> {
@@ -438,18 +586,8 @@ class ArRenderer(
         points.draw(viewProjection, v, 1, red = r, green = g, blue = b, pointSizePx = sizePx)
     }
 
-    private fun drawMarkerRing(table: TableFrame, pos: Vec2, r: Float, g: Float, b: Float, extraRadiusMm: Double) {
-        drawCircle(table, pos, gameType.ballRadiusMm + extraRadiusMm, r, g, b, 0.9f)
-    }
+    // ---- ball detection pipeline -----------------------------------------------------
 
-    // ---- ball detection (Phase 2) ---------------------------------------------
-
-    /**
-     * Map any finished detection from image pixels to table space and feed
-     * the tracker. Mapping: image px → view px (ARCore's display transform)
-     * → NDC → unproject through the inverse view-projection → world ray →
-     * intersect the ball-centre plane (one radius above the cloth).
-     */
     private fun ingestDetections(frame: Frame, table: TableFrame) {
         val result = detector.takeResult() ?: return
         if (result.balls.isEmpty()) {
@@ -552,82 +690,19 @@ class ArRenderer(
         lastDetectionSubmitMs = now
     }
 
-    /** Colour-coded dots hovering at each tracked ball's centre. */
-    private fun drawBalls(table: TableFrame) {
-        val balls = trackedBalls
-        if (balls.isEmpty()) return
-        val up = table.upNormal
-        val lift = gameType.ballRadiusMm / 1000.0
+    // ---- misc ------------------------------------------------------------------------
 
-        val position = FloatArray(3)
-        for (ball in balls) {
-            val world = table.toWorld(ball.position) + up * lift
-            position[0] = world.x.toFloat()
-            position[1] = world.y.toFloat()
-            position[2] = world.z.toFloat()
-            val rgb = ball.appearance.displayRgb
-            points.draw(
-                viewProjection, position, 1,
-                red = rgb[0], green = rgb[1], blue = rgb[2],
-                pointSizePx = 38f,
-            )
-        }
+    private fun dimsText(frame: TableFrame): String =
+        String.format("%.2f m × %.2f m", frame.widthMm / 1000.0, frame.lengthMm / 1000.0)
+
+    private fun setTransient(message: String) {
+        transientStatus = message
+        transientStatusUntilMs = SystemClock.uptimeMillis() + 2500
     }
 
-    // ---- drawing -------------------------------------------------------------
-
-    private fun drawCornerMarkers() {
-        if (cornerAnchors.isEmpty()) return
-        val positions = FloatArray(cornerAnchors.size * 3)
-        cornerAnchors.forEachIndexed { i, anchor ->
-            val t = anchor.pose.translation
-            positions[i * 3] = t[0]
-            positions[i * 3 + 1] = t[1]
-            positions[i * 3 + 2] = t[2]
-        }
-        // Amber corner pins.
-        points.draw(viewProjection, positions, cornerAnchors.size, red = 0.95f, green = 0.7f, blue = 0.25f, pointSizePx = 44f)
-    }
-
-    private fun drawTable(frame: TableFrame) {
-        val w = frame.widthMm
-        val l = frame.lengthMm
-
-        // Outline + grid lines in table space (mm), lifted to world space.
-        val segments = mutableListOf<Pair<Vec2, Vec2>>()
-        segments += Vec2(0.0, 0.0) to Vec2(w, 0.0)
-        segments += Vec2(w, 0.0) to Vec2(w, l)
-        segments += Vec2(w, l) to Vec2(0.0, l)
-        segments += Vec2(0.0, l) to Vec2(0.0, 0.0)
-
-        var x = GRID_STEP_MM
-        while (x < w) {
-            segments += Vec2(x, 0.0) to Vec2(x, l)
-            x += GRID_STEP_MM
-        }
-        var y = GRID_STEP_MM
-        while (y < l) {
-            segments += Vec2(0.0, y) to Vec2(w, y)
-            y += GRID_STEP_MM
-        }
-
-        val vertices = FloatArray(segments.size * 2 * 3)
-        segments.forEachIndexed { i, (a, b) ->
-            frame.toWorld(a).into(vertices, i * 6)
-            frame.toWorld(b).into(vertices, i * 6 + 3)
-        }
-
-        // Chalk-blue grid, slightly transparent; bold outline drawn on top.
-        lines.draw(viewProjection, vertices, segments.size * 2, red = 0.35f, green = 0.75f, blue = 0.85f, alpha = 0.55f, widthPx = 4f)
-        lines.draw(viewProjection, vertices, 8, red = 0.35f, green = 0.85f, blue = 0.95f, alpha = 0.95f, widthPx = 8f)
-
-        // Pocket markers from the geometry model (positions derive from the rectangle).
-        val table: Table = frame.table(gameType)
-        val pockets = FloatArray(table.pockets.size * 3)
-        table.pockets.forEachIndexed { i, pocket ->
-            frame.toWorld(pocket.center).into(pockets, i * 3)
-        }
-        points.draw(viewProjection, pockets, table.pockets.size, red = 0.1f, green = 0.1f, blue = 0.1f, pointSizePx = 52f)
+    private fun currentTransient(): String? {
+        if (SystemClock.uptimeMillis() >= transientStatusUntilMs) return null
+        return transientStatus
     }
 
     private fun report(status: String) {
@@ -654,5 +729,6 @@ class ArRenderer(
         const val DETECTION_INTERVAL_MS = 250L
         const val BALL_PICK_MM = 80.0
         const val POCKET_PICK_MM = 220.0
+        const val POCKET_RING_MM = 70.0
     }
 }

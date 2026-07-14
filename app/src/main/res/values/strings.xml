@@ -1,28 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PoolSight</string>
+
+    <!-- tabs & buttons -->
+    <string name="tab_table">⬛ Table</string>
+    <string name="tab_play">🎱 Play</string>
+    <string name="btn_reset_corners">↺ Reset</string>
+    <string name="btn_flip">⇄ Flip</string>
+    <string name="btn_create_shot">🎯 Create shot</string>
+    <string name="btn_freeze">❄ Freeze</string>
+    <string name="btn_resume">▶ Resume</string>
+
+    <!-- startup & tracking -->
     <string name="status_starting">Starting camera…</string>
     <string name="status_move_phone">Move the phone slowly over the table…</string>
-    <string name="status_tap_corner">Tap corner %1$d of 4 — the inside cushion corner. Walk around the table for each; if taps don\'t land, sweep the phone over the rails first</string>
-    <string name="status_tap_missed">Tap didn\'t land — sweep the phone slowly over the table (the rails and pockets help AR map it), then try again</string>
     <string name="status_tracking_dark">Too dark for AR — more light on the table will fix this</string>
     <string name="status_tracking_motion">Moving too fast — hold the phone steadier</string>
     <string name="status_tracking_features">Struggling to map the view — aim at the rails/pockets and sweep slowly (plain cloth is hard for AR)</string>
-    <string name="status_table_locked">Table locked ✓ %1$s — the grid should hug the cloth</string>
-    <string name="status_balls_seen">Table %1$s ✓ — %2$d ball(s) — tap the ball you want to pot</string>
-    <string name="status_select_pocket">Now tap the pocket you want it to go in</string>
-    <string name="status_thats_cue">That\'s the white ball — tap the ball you want to pot</string>
+
+    <!-- Table tab -->
+    <string name="status_diag_first">TABLE SETUP — walk to any corner pocket and tap its inside cushion corner (1 of 2)</string>
+    <string name="status_diag_second">Now walk to the DIAGONALLY OPPOSITE corner pocket and tap its cushion corner (2 of 2)</string>
+    <string name="status_tap_missed">Tap didn\'t land — sweep the phone slowly over the table (the rails and pockets help AR map it), then try again</string>
+    <string name="status_bad_diagonal">Those two taps don\'t span a table — ↺ Reset and tap two OPPOSITE corner pockets</string>
+    <string name="status_table_locked_table_tab">Table locked ✓ %1$s — wrong way round? ⇄ Flip · redo? ↺ Reset · ready? go to 🎱 Play</string>
+    <string name="status_table_locked_hint">Table is set — ↺ Reset to redo the corners, or switch to 🎱 Play</string>
+
+    <!-- Play tab -->
+    <string name="status_play_not_calibrated">No table set up yet — switch to the ⬛ Table tab first</string>
+    <string name="status_no_balls">Looking for balls… make sure balls are on the table and in view</string>
+    <string name="status_tap_ball">%1$d ball(s) seen — tap the one you want to pot</string>
+    <string name="status_thats_cue">That\'s the white ball — tap the ball you want to pot instead</string>
+    <string name="status_tap_pocket_next">Ball selected ✓ — now tap the target pocket</string>
+    <string name="status_press_create">Ball ✓ pocket ✓ — press 🎯 Create shot</string>
+    <string name="hint_need_selection">Pick a ball and a pocket first</string>
     <string name="status_no_cue">Can\'t see the white ball — make sure it\'s in view</string>
-    <string name="shot_direct">Aim along the line — cut %1$d° · %2$s</string>
+
+    <!-- shot results -->
+    <string name="shot_direct">Aim the white ball along the line — cut %1$d° · %2$s</string>
     <string name="shot_bank">BANK off the cushion (estimate) — cut %1$d° · %2$s</string>
     <string name="shot_cue_blocked">Cue ball\'s path is blocked — no clean shot to that pocket</string>
     <string name="shot_object_blocked">That ball\'s path to the pocket is blocked</string>
     <string name="shot_impossible">No makeable shot to that pocket — try a different pocket</string>
-    <string name="frozen_status">FROZEN — line locked, put the phone down and play · %1$s</string>
-    <string name="btn_freeze">❄ Freeze</string>
-    <string name="btn_resume">▶ Resume</string>
-    <string name="status_bad_rectangle">Those corners don\'t form a table shape — try again, tapping the 4 cushion corners in order</string>
-    <string name="btn_reset_corners">↺ Reset corners</string>
+    <string name="frozen_status">FROZEN — put the phone down and play · %1$s</string>
+
+    <!-- errors -->
     <string name="status_camera_unavailable">Camera unavailable — is another app using it?</string>
     <string name="status_frame_error">Hiccup in frame processing (%1$s) — still running</string>
     <string name="error_camera_permission">PoolSight needs the camera to see the table. Please allow camera access.</string>

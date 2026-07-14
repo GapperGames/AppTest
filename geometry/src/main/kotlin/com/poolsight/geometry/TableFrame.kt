@@ -144,5 +144,51 @@ class TableFrame(
             max(a, b) / min(a, b) <= MAX_OPPOSITE_EDGE_RATIO
 
         private data class Fit(val xEdge: Vec3, val width: Double, val yEdge: Vec3, val length: Double)
+
+        /** Plausible corner-to-corner diagonals: 6ft pool (~1.87m) to 12ft snooker (~4m). */
+        const val MIN_DIAGONAL_M = 1.5
+        const val MAX_DIAGONAL_M = 4.5
+
+        /**
+         * Fit a table from just TWO taps: diagonally opposite playing-surface
+         * corners. Pool and snooker playing surfaces are 2:1 (length = 2 ×
+         * width), so the diagonal plus that ratio pins the rectangle down to
+         * exactly TWO candidates — mirror images across the diagonal.
+         * [mirrored] selects between them (a "flip" button in the UI).
+         * Tables are level, so the plane is the horizontal one through the
+         * taps (world +Y is gravity-up in ARCore).
+         *
+         * More reliable than four taps in practice: half the tap error, and
+         * the rectangle is perfect by construction.
+         */
+        fun fitFromDiagonal(a: Vec3, c: Vec3, mirrored: Boolean = false): TableFrame? {
+            // Flatten both taps onto a horizontal plane at their mean height.
+            val y = (a.y + c.y) / 2.0
+            val pa = Vec3(a.x, y, a.z)
+            val pc = Vec3(c.x, y, c.z)
+
+            val diagonal = pc - pa
+            val dLen = diagonal.length()
+            if (dLen < MIN_DIAGONAL_M || dLen > MAX_DIAGONAL_M) return null
+
+            // For a 2:1 rectangle the centre→corner vectors of adjacent
+            // corners are 2θ apart with cos2θ = 3/5, sin2θ = 4/5 — exactly.
+            // Rotating centre→A by ±2θ about the vertical gives corner B of
+            // the two mirror candidates; D is B reflected through the centre.
+            val center = pa + diagonal * 0.5
+            val toA = pa - center
+            val sin = if (mirrored) 0.8 else -0.8
+            val toB = Vec3(
+                toA.x * 0.6 + toA.z * sin,
+                toA.y,
+                -toA.x * sin + toA.z * 0.6,
+            )
+            val b = center + toB
+            val d = center - toB
+
+            // A→B→C→D walks around the rectangle; reuse the 4-corner fit for
+            // axis conventions and final validation.
+            return fitFromCorners(listOf(pa, b, pc, d))
+        }
     }
 }

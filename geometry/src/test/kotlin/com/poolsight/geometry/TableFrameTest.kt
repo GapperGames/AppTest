@@ -124,6 +124,76 @@ class TableFrameTest {
         assertTrue(shot is ShotResult.Solution && !shot.isBank)
     }
 
+    // ---- two-tap diagonal calibration ---------------------------------------
+
+    @Test
+    fun `diagonal fit reconstructs the 2-to-1 rectangle exactly`() {
+        // Diagonal of the 1m × 2m table: (0,0,0) → (1,0,2), length √5.
+        val frame = assertNotNull(TableFrame.fitFromDiagonal(p0, p2))
+
+        assertEquals(1000.0, frame.widthMm, 1e-6)
+        assertEquals(2000.0, frame.lengthMm, 1e-6)
+
+        // Both tapped corners land exactly on the rectangle's diagonal corners.
+        val a = frame.toTable(p0)
+        val c = frame.toTable(p2)
+        assertEquals(0.0, a.x, 1e-6)
+        assertEquals(0.0, a.y, 1e-6)
+        assertEquals(1000.0, c.x, 1e-6)
+        assertEquals(2000.0, c.y, 1e-6)
+
+        // The default orientation reproduces the canonical rectangle: its
+        // width-corner sits at world (1,0,0).
+        assertTrue(frame.toWorld(Vec2(1000.0, 0.0)).distanceTo(p1) < 1e-6)
+    }
+
+    @Test
+    fun `diagonal fit has exactly two mirror solutions, chosen by the flag`() {
+        val normal = assertNotNull(TableFrame.fitFromDiagonal(p0, p2, mirrored = false))
+        val mirror = assertNotNull(TableFrame.fitFromDiagonal(p0, p2, mirrored = true))
+
+        // Same dimensions...
+        assertEquals(normal.widthMm, mirror.widthMm, 1e-9)
+        assertEquals(normal.lengthMm, mirror.lengthMm, 1e-9)
+
+        // ...but genuinely different rectangles (reflections across the diagonal).
+        val cornerNormal = normal.toWorld(Vec2(1000.0, 0.0))
+        val cornerMirror = mirror.toWorld(Vec2(1000.0, 0.0))
+        assertTrue(cornerNormal.distanceTo(cornerMirror) > 0.5)
+
+        // Both still share the tapped diagonal corners.
+        assertTrue(mirror.toTable(p0).distanceTo(Vec2(0.0, 0.0)) < 1e-6)
+        assertTrue(mirror.toTable(p2).distanceTo(Vec2(1000.0, 2000.0)) < 1e-6)
+    }
+
+    @Test
+    fun `diagonal fit works rotated, translated, and with tap-height noise`() {
+        val rad = Math.toRadians(63.0)
+        val offset = Vec3(-2.0, 0.9, 4.0)
+        fun place(p: Vec3) = Vec3(
+            p.x * cos(rad) + p.z * sin(rad),
+            p.y,
+            -p.x * sin(rad) + p.z * cos(rad),
+        ) + offset
+
+        val a = place(p0) + Vec3(0.0, 0.012, 0.0)  // slight height noise
+        val c = place(p2) + Vec3(0.0, -0.008, 0.0)
+        val frame = assertNotNull(TableFrame.fitFromDiagonal(a, c))
+
+        assertEquals(1000.0, frame.widthMm, 20.0)
+        assertEquals(2000.0, frame.lengthMm, 20.0)
+        // The two taps sit at opposite corners of the fitted table.
+        assertTrue(frame.toTable(a).distanceTo(Vec2(0.0, 0.0)) < 25.0)
+        assertTrue(frame.toTable(c).distanceTo(Vec2(1000.0, 2000.0)) < 25.0)
+    }
+
+    @Test
+    fun `diagonal fit rejects implausible diagonals`() {
+        // Too short (an ashtray, not a table) and too long (a barn).
+        assertNull(TableFrame.fitFromDiagonal(p0, Vec3(0.3, 0.0, 0.6)))
+        assertNull(TableFrame.fitFromDiagonal(p0, Vec3(3.0, 0.0, 6.0)))
+    }
+
     private fun assertVec2(expected: Vec2, actual: Vec2, tol: Double = 1e-9) {
         assertEquals(expected.x, actual.x, tol, "x of $actual")
         assertEquals(expected.y, actual.y, tol, "y of $actual")
