@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PoolSight</string>
+    <string name="status_starting">Starting camera…</string>
+    <string name="status_move_phone">Move the phone slowly over the table…</string>
+    <string name="status_searching">Looking for a flat surface — sweep slowly across the table</string>
+    <string name="status_locked">Surface locked ✓ (%1$d found) — marker should stay put as you move</string>
+    <string name="status_camera_unavailable">Camera unavailable — is another app using it?</string>
+    <string name="status_frame_error">Hiccup in frame processing (%1$s) — still running</string>
+    <string name="error_camera_permission">PoolSight needs the camera to see the table. Please allow camera access.</string>
+    <string name="error_arcore_not_installed">Google Play Services for AR is required. Please install it from the Play Store.</string>
+    <string name="error_arcore_too_old">Please update Google Play Services for AR in the Play Store.</string>
+    <string name="error_app_too_old">This app build is too old for your AR services version.</string>
+    <string name="error_device_unsupported">This device does not support ARCore.</string>
+    <string name="error_session_failed">Could not start AR: %1$s</string>
+</resources>

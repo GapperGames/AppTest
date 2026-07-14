@@ -6,9 +6,26 @@ it to go in, and the app overlays the correct aim line, the "ghost ball"
 position, and the exact spot to strike — directly onto the live camera view
 of the table.
 
-> **Status: Design phase.** No application code yet. This repository currently
-> contains the design specification and the implementation roadmap. See
-> [`docs/`](docs/).
+> **Status: Phase 0 built** (ARCore foundation) — plus the Phase 3 aiming
+> maths, pulled forward and fully unit-tested. Target device: Samsung Galaxy
+> S22+. Design docs in [`docs/`](docs/).
+
+## Getting the app on your phone (no computer needed)
+
+Every push to this branch makes GitHub build the app automatically:
+
+1. On your phone, open this repository on **github.com** → **Actions** tab.
+2. Open the newest run with a green tick → scroll to **Artifacts**.
+3. Download **PoolSight-debug-apk**, unzip it, and tap the APK to install.
+   (Android will ask you to allow installs from your browser — that's normal
+   for apps outside the Play Store.)
+
+## Project layout
+
+| Module | What it is |
+|--------|------------|
+| `geometry/` | The aiming brain: ghost-ball, bank-shot and obstruction maths. Pure Kotlin, fully unit-tested — no phone needed. |
+| `app/` | The Android app. Phase 0: camera + ARCore surface tracking with on-screen status. |
 
 ## What it does (in one picture)
 

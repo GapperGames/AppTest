@@ -1,0 +1,50 @@
+name: Android CI
+
+# Builds the installable APK in the cloud. To get PoolSight on your phone:
+# open this repo on your phone → Actions tab → newest green run →
+# download the "PoolSight-debug-apk" artifact → unzip → install the APK.
+on:
+  push:
+    branches:
+      - master
+      - main
+      - "claude/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Test maths & build APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run aiming-engine unit tests
+        run: ./gradlew :geometry:test
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PoolSight-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: geometry/build/reports/tests/
+          retention-days: 7

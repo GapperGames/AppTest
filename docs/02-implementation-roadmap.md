@@ -181,11 +181,30 @@ get trustworthy aim help on real shots without fighting the app.
 
 ## What we need from you before Phase 0
 
-| Needed | Why | Blocking? |
-|--------|-----|-----------|
-| **Phone model** | Confirm ARCore support; set min-SDK & camera res | Yes, for P0 |
-| Your usual table (size + cloth colour) | Tune calibration defaults | No — has defaults |
-| A go-ahead to start coding | We're design-only right now | Yes |
+| Needed | Why | Status |
+|--------|-----|--------|
+| **Phone model** | Confirm ARCore support; set min-SDK & camera res | ✅ **Samsung Galaxy S22+** — fully ARCore-supported |
+| Your usual table (size + cloth colour) | Tune calibration defaults | Open — has defaults |
+| A go-ahead to start coding | We're design-only right now | ✅ Given 14 Jul 2026 |
+
+## Build & delivery (no laptop needed)
+
+The owner works phone-only, so:
+
+- **The maths is proven in the cloud dev environment** — the `geometry`
+  module's unit tests run there (and in CI) with no device involved. This is
+  the "prove the maths without a phone" principle; no laptop required.
+- **APKs are built by GitHub Actions** on every push
+  (`.github/workflows/android.yml`) and downloaded straight to the phone from
+  the repo's Actions tab.
+- A debug keystore is committed so every CI build carries the same signature —
+  new builds install over old ones without uninstalling.
+
+**Progress note (14 Jul 2026):** Phase 0 is code-complete (ARCore session,
+camera background, plane markers, permission/install flows). The Phase 3
+geometry engine was pulled forward — ghost ball, cut angle, obstruction and
+one-cushion banks are implemented and unit-tested (20 tests green). On-device
+verification of P0 happens when the owner installs the first APK.
 
 ## Cross-cutting concerns tracked throughout
 
