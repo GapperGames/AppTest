@@ -88,13 +88,28 @@ class MainActivity : Activity() {
             setPadding(40, 24, 40, 24)
         }
 
-        val resetButton = TextView(this).apply {
-            text = getString(R.string.btn_reset_corners)
+        fun pillButton(label: String, onClick: () -> Unit) = TextView(this).apply {
+            text = label
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xCC14603F.toInt())
             textSize = 16f
             setPadding(56, 28, 56, 28)
-            setOnClickListener { renderer.requestReset() }
+            setOnClickListener { onClick() }
+        }
+
+        val resetButton = pillButton(getString(R.string.btn_reset_corners)) { renderer.requestReset() }
+        lateinit var freezeButton: TextView
+        freezeButton = pillButton(getString(R.string.btn_freeze)) {
+            renderer.frozen = !renderer.frozen
+            freezeButton.text =
+                getString(if (renderer.frozen) R.string.btn_resume else R.string.btn_freeze)
+        }
+
+        val buttons = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            addView(resetButton)
+            addView(android.view.View(context), android.widget.LinearLayout.LayoutParams(40, 1))
+            addView(freezeButton)
         }
 
         val root = FrameLayout(this)
@@ -108,7 +123,7 @@ class MainActivity : Activity() {
             ).apply { topMargin = 80 },
         )
         root.addView(
-            resetButton,
+            buttons,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,

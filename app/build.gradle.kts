@@ -11,8 +11,8 @@ android {
         applicationId = "com.poolsight.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.4-phase2"
+        versionCode = 5
+        versionName = "0.5-aiming"
     }
 
     signingConfigs {

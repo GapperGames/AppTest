@@ -134,6 +134,13 @@ much jitter.
 numbers, **and** tapping a ball + pocket on the real table draws an aim line
 that points where your own eyes agree it should.
 
+> **Status (14 Jul 2026):** engine built and green since day one; the
+> selection UI (tap ball → tap pocket), the full overlay (aim line, ghost
+> circle, dashed object path, contact dot, difficulty), automatic bank
+> fallback when the direct pot is blocked, and the Freeze button all landed
+> in v0.5 — this folds most of Phase 4 and the Phase 5 bank rendering in
+> early. Awaiting on-table verification.
+
 ---
 
 ## Phase 4 — AR overlay polish

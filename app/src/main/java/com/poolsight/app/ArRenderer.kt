@@ -11,13 +11,20 @@ import com.google.ar.core.Plane
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.CameraNotAvailableException
+import com.poolsight.geometry.Ball
 import com.poolsight.geometry.GameType
+import com.poolsight.geometry.ShotProblem
+import com.poolsight.geometry.ShotResult
+import com.poolsight.geometry.ShotSolver
 import com.poolsight.geometry.Table
 import com.poolsight.geometry.TableFrame
 import com.poolsight.geometry.Vec2
 import com.poolsight.geometry.Vec3
+import com.poolsight.vision.BallClass
 import com.poolsight.vision.BallTracker
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.math.cos
+import kotlin.math.sin
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
@@ -68,6 +75,12 @@ class ArRenderer(
     private val inverseViewProjection = FloatArray(16)
     private val scratch4 = FloatArray(4)
     private val scratch4b = FloatArray(4)
+
+    // --- shot selection & freeze (Phases 3+4) ---
+    private var selectedBallId: Int? = null
+    private var selectedPocketIndex: Int? = null
+    @Volatile
+    var frozen = false
 
     private var lastStatus = ""
 
@@ -133,20 +146,22 @@ class ArRenderer(
             val frameNow = tableFrame
             if (frameNow != null) {
                 android.opengl.Matrix.invertM(inverseViewProjection, 0, viewProjection, 0)
-                ingestDetections(frame, frameNow)
-                maybeSubmitDetection(frame, frameNow)
+                if (!frozen) {
+                    ingestDetections(frame, frameNow)
+                    maybeSubmitDetection(frame, frameNow)
+                }
 
                 drawTable(frameNow)
                 drawBalls(frameNow)
+                val shotStatus = solveAndDrawShot(frameNow)
 
                 val dims = String.format("%.2f m × %.2f m", frameNow.widthMm / 1000.0, frameNow.lengthMm / 1000.0)
-                report(
-                    if (trackedBalls.isEmpty()) {
-                        appContext.getString(R.string.status_table_locked, dims)
-                    } else {
-                        appContext.getString(R.string.status_balls_seen, dims, trackedBalls.size)
-                    },
-                )
+                val base = shotStatus ?: if (trackedBalls.isEmpty()) {
+                    appContext.getString(R.string.status_table_locked, dims)
+                } else {
+                    appContext.getString(R.string.status_balls_seen, dims, trackedBalls.size)
+                }
+                report(if (frozen) appContext.getString(R.string.frozen_status, base) else base)
             } else if (!planesTracked) {
                 report(appContext.getString(R.string.status_searching))
             } else {
@@ -165,7 +180,11 @@ class ArRenderer(
     private fun handleTaps(frame: Frame) {
         while (true) {
             val tap = pendingTaps.poll() ?: return
-            if (cornerAnchors.size >= 4) continue // already calibrated; taps ignored until reset
+            if (cornerAnchors.size >= 4) {
+                // Calibrated: taps select the ball to pot, then the pocket.
+                if (!frozen) tableFrame?.let { handleSelectionTap(tap, it) }
+                continue
+            }
 
             val hit = frame.hitTest(tap[0], tap[1]).firstOrNull { h ->
                 val plane = h.trackable as? Plane ?: return@firstOrNull false
@@ -209,6 +228,191 @@ class ArRenderer(
         tableFrame = null
         tracker.clear()
         trackedBalls = emptyList()
+        selectedBallId = null
+        selectedPocketIndex = null
+        frozen = false
+    }
+
+    // ---- shot selection & aiming overlay (Phases 3+4) --------------------------
+
+    /** Tap on the calibrated table: pick the object ball, then the pocket. */
+    private fun handleSelectionTap(tap: FloatArray, table: TableFrame) {
+        val ndcX = 2f * tap[0] / viewportWidth - 1f
+        val ndcY = 1f - 2f * tap[1] / viewportHeight
+        val (origin, dir) = unprojectRay(ndcX, ndcY) ?: return
+        val tapPos = table.ballCenterFromRay(origin, dir, gameType.ballRadiusMm, marginMm = 250.0) ?: return
+
+        // A tracked ball near the tap → select it as the object ball.
+        val ball = trackedBalls.minByOrNull { it.position.distanceTo(tapPos) }
+        if (ball != null && ball.position.distanceTo(tapPos) < BALL_PICK_MM) {
+            if (ball.appearance.ballClass == BallClass.CUE) {
+                transientStatus = appContext.getString(R.string.status_thats_cue)
+            } else {
+                selectedBallId = ball.id
+                selectedPocketIndex = null
+            }
+            return
+        }
+
+        // A pocket near the tap (with a ball already chosen) → set the target.
+        if (selectedBallId != null) {
+            val pockets = table.table(gameType).pockets
+            val nearest = pockets.withIndex().minByOrNull { it.value.center.distanceTo(tapPos) }
+            if (nearest != null && nearest.value.center.distanceTo(tapPos) < POCKET_PICK_MM) {
+                selectedPocketIndex = nearest.index
+                return
+            }
+        }
+
+        // Empty felt: clear the shot.
+        selectedBallId = null
+        selectedPocketIndex = null
+    }
+
+    /** One-shot status hint (e.g. "that's the cue ball"), shown for a moment. */
+    private var transientStatus: String? = null
+    private var transientStatusUntilMs = 0L
+
+    /**
+     * Solve the selected shot against current ball positions and draw the
+     * overlay. Returns the status line to show, or null when no shot is
+     * in progress.
+     */
+    private fun solveAndDrawShot(table: TableFrame): String? {
+        val now = SystemClock.uptimeMillis()
+        transientStatus?.let {
+            if (transientStatusUntilMs == 0L) transientStatusUntilMs = now + 2500
+            if (now < transientStatusUntilMs) return it
+            transientStatus = null
+            transientStatusUntilMs = 0L
+        }
+
+        val objectId = selectedBallId ?: return null
+        val objectBall = trackedBalls.firstOrNull { it.id == objectId }
+        if (objectBall == null) {
+            selectedBallId = null
+            selectedPocketIndex = null
+            return null
+        }
+
+        // Highlight the selected ball.
+        drawMarkerRing(table, objectBall.position, 1f, 0.85f, 0.2f, 30.0)
+
+        val pocketIdx = selectedPocketIndex ?: return appContext.getString(R.string.status_select_pocket)
+
+        val cue = trackedBalls.firstOrNull { it.appearance.ballClass == BallClass.CUE }
+            ?: return appContext.getString(R.string.status_no_cue)
+
+        val gameTable = table.table(gameType)
+        val pocket = gameTable.pockets[pocketIdx]
+        val solver = ShotSolver(gameTable)
+
+        val cueBall = Ball("cue", cue.position)
+        val objBall = Ball("obj", objectBall.position)
+        val others = trackedBalls
+            .filter { it.id != objectId && it.id != cue.id }
+            .map { Ball(it.id.toString(), it.position) }
+
+        // Direct first; fall back to the best bank.
+        val direct = solver.solveDirect(cueBall, objBall, pocket, others)
+        val solution = direct as? ShotResult.Solution
+            ?: solver.solveAll(cueBall, objBall, pocket, others).firstOrNull()
+
+        if (solution == null) {
+            return when ((direct as? ShotResult.Impossible)?.problem) {
+                ShotProblem.CUE_PATH_BLOCKED -> appContext.getString(R.string.shot_cue_blocked)
+                ShotProblem.OBJECT_PATH_BLOCKED -> appContext.getString(R.string.shot_object_blocked)
+                else -> appContext.getString(R.string.shot_impossible)
+            }
+        }
+
+        drawShot(table, cueBall, solution)
+
+        val cutDeg = solution.cutAngleDegrees.toInt()
+        val difficulty = solution.difficulty.name.replace('_', ' ')
+        return if (solution.isBank) {
+            appContext.getString(R.string.shot_bank, cutDeg, difficulty)
+        } else {
+            appContext.getString(R.string.shot_direct, cutDeg, difficulty)
+        }
+    }
+
+    /** Aim line, ghost ball, contact spot, object path — the actual cheat. */
+    private fun drawShot(table: TableFrame, cue: Ball, shot: ShotResult.Solution) {
+        // Aim line: cue centre → ghost centre. Bold white.
+        drawTableLines(table, listOf(cue.center to shot.ghost), 1f, 1f, 1f, 0.95f, 8f)
+
+        // Object path (dashed amber): O → P, or O → bounce → P for banks.
+        val dashes = mutableListOf<Pair<Vec2, Vec2>>()
+        for (i in 0 until shot.objectPath.size - 1) {
+            dashes += dashSegments(shot.objectPath[i], shot.objectPath[i + 1])
+        }
+        drawTableLines(table, dashes, 1f, 0.75f, 0.25f, 0.95f, 6f)
+
+        // Ghost ball: faint circle where the cue ball must arrive.
+        drawCircle(table, shot.ghost, gameType.ballRadiusMm, 1f, 1f, 1f, 0.8f)
+
+        // Contact spot on the object ball.
+        drawMarkerDot(table, shot.contactPoint, 1f, 0.3f, 0.25f, 16f)
+    }
+
+    private fun dashSegments(a: Vec2, b: Vec2, dashMm: Double = 60.0, gapMm: Double = 45.0): List<Pair<Vec2, Vec2>> {
+        val total = a.distanceTo(b)
+        if (total < 1.0) return emptyList()
+        val dir = (b - a).normalized()
+        val out = mutableListOf<Pair<Vec2, Vec2>>()
+        var d = 0.0
+        while (d < total) {
+            val end = minOf(d + dashMm, total)
+            out += (a + dir * d) to (a + dir * end)
+            d = end + gapMm
+        }
+        return out
+    }
+
+    private fun drawTableLines(
+        table: TableFrame,
+        segments: List<Pair<Vec2, Vec2>>,
+        r: Float, g: Float, b: Float, alpha: Float, widthPx: Float,
+    ) {
+        if (segments.isEmpty()) return
+        val lift = gameType.ballRadiusMm / 1000.0
+        val up = table.upNormal
+        val vertices = FloatArray(segments.size * 6)
+        segments.forEachIndexed { i, (p, q) ->
+            (table.toWorld(p) + up * lift).into(vertices, i * 6)
+            (table.toWorld(q) + up * lift).into(vertices, i * 6 + 3)
+        }
+        lines.draw(viewProjection, vertices, segments.size * 2, r, g, b, alpha, widthPx)
+    }
+
+    private fun drawCircle(
+        table: TableFrame,
+        center: Vec2,
+        radiusMm: Double,
+        r: Float, g: Float, b: Float, alpha: Float,
+        segments: Int = 24,
+    ) {
+        val pts = mutableListOf<Pair<Vec2, Vec2>>()
+        var prev = center + Vec2(radiusMm, 0.0)
+        for (i in 1..segments) {
+            val angle = 2.0 * Math.PI * i / segments
+            val next = center + Vec2(radiusMm * cos(angle), radiusMm * sin(angle))
+            pts += prev to next
+            prev = next
+        }
+        drawTableLines(table, pts, r, g, b, alpha, 5f)
+    }
+
+    private fun drawMarkerDot(table: TableFrame, pos: Vec2, r: Float, g: Float, b: Float, sizePx: Float) {
+        val world = table.toWorld(pos) + table.upNormal * (gameType.ballRadiusMm / 1000.0)
+        val v = FloatArray(3)
+        world.into(v, 0)
+        points.draw(viewProjection, v, 1, red = r, green = g, blue = b, pointSizePx = sizePx)
+    }
+
+    private fun drawMarkerRing(table: TableFrame, pos: Vec2, r: Float, g: Float, b: Float, extraRadiusMm: Double) {
+        drawCircle(table, pos, gameType.ballRadiusMm + extraRadiusMm, r, g, b, 0.9f)
     }
 
     // ---- ball detection (Phase 2) ---------------------------------------------
@@ -421,5 +625,7 @@ class ArRenderer(
         const val GRID_STEP_MM = 250.0
         const val MIN_CORNER_SPACING_M = 0.25
         const val DETECTION_INTERVAL_MS = 250L
+        const val BALL_PICK_MM = 80.0
+        const val POCKET_PICK_MM = 220.0
     }
 }
