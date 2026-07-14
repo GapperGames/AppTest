@@ -35,6 +35,40 @@ class TableFrame(
     /** The geometry-engine table model for these measured dimensions. */
     fun table(game: GameType): Table = Table(widthMm, lengthMm, game)
 
+    /** Unit normal of the table plane, pointing up (away from the floor). */
+    val upNormal: Vec3 by lazy {
+        val n = (xAxis cross yAxis).normalizedOrNull() ?: Vec3(0.0, 1.0, 0.0)
+        if (n.y < 0.0) n * -1.0 else n
+    }
+
+    /**
+     * Where is the ball whose image lies along this camera ray?
+     *
+     * The ray from the camera through a ball's pixel centroid intersects a
+     * plane ONE BALL RADIUS above the cloth (we sight the ball's centre, not
+     * its contact point — intersecting the cloth itself would smear the ball
+     * away from the camera by parallax). Returns the ball's table-space
+     * position, or null when the ray misses (parallel/behind) or lands
+     * outside the playing surface by more than [marginMm].
+     */
+    fun ballCenterFromRay(
+        rayOrigin: Vec3,
+        rayDirection: Vec3,
+        ballRadiusMm: Double,
+        marginMm: Double = 50.0,
+    ): Vec2? {
+        val planePoint = origin + upNormal * (ballRadiusMm / 1000.0)
+        val denom = rayDirection dot upNormal
+        if (kotlin.math.abs(denom) < Vec2.EPSILON) return null
+        val t = ((planePoint - rayOrigin) dot upNormal) / denom
+        if (t <= 0.0) return null
+        val hit = rayOrigin + rayDirection * t
+        val table = toTable(hit)
+        if (table.x < -marginMm || table.x > widthMm + marginMm) return null
+        if (table.y < -marginMm || table.y > lengthMm + marginMm) return null
+        return table
+    }
+
     companion object {
         /** Corners closer than this are suspicious double-taps / bad rectangles. */
         const val MIN_EDGE_METRES = 0.3

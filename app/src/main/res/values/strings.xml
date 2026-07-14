@@ -6,6 +6,7 @@
     <string name="status_searching">Looking for a flat surface — sweep slowly across the table</string>
     <string name="status_tap_corner">Table found — tap corner %1$d of 4 (the inside corner of the cushions, going around the table)</string>
     <string name="status_table_locked">Table locked ✓ %1$s — the grid should hug the cloth</string>
+    <string name="status_balls_seen">Table %1$s ✓ — %2$d ball(s) spotted</string>
     <string name="status_bad_rectangle">Those corners don\'t form a table shape — try again, tapping the 4 cushion corners in order</string>
     <string name="btn_reset_corners">↺ Reset corners</string>
     <string name="status_camera_unavailable">Camera unavailable — is another app using it?</string>

@@ -105,6 +105,16 @@ and stay glued as you move the phone.
 type most of the time, and the highlights sit steadily on the balls without
 much jitter.
 
+> **Implementation note (14 Jul 2026):** built as a pure-Kotlin vision core
+> (no OpenCV dependency — smaller APK, every algorithm unit-tested offline):
+> YUV frames downsampled to ~360px, cloth colour learnt per frame by median
+> HSV inside the calibrated table polygon, non-cloth round blobs size-filtered
+> using the expected ball radius (from camera focal length × distance), colour
+> classified (cue/black/solid/stripe), then mapped image→table by unprojecting
+> the pixel ray onto a plane ONE BALL RADIUS above the cloth (parallax
+> correction) and smoothed by a confirm-after-3-sightings tracker.
+> **Status: code-complete (v0.4), awaiting on-table verification.**
+
 ---
 
 ## Phase 3 — Aiming engine: direct shots (pure Kotlin, no device)

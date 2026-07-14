@@ -3,7 +3,9 @@ package com.poolsight.app
 import android.content.Context
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
+import android.os.SystemClock
 import com.google.ar.core.Anchor
+import com.google.ar.core.Coordinates2d
 import com.google.ar.core.Frame
 import com.google.ar.core.Plane
 import com.google.ar.core.Session
@@ -14,6 +16,7 @@ import com.poolsight.geometry.Table
 import com.poolsight.geometry.TableFrame
 import com.poolsight.geometry.Vec2
 import com.poolsight.geometry.Vec3
+import com.poolsight.vision.BallTracker
 import java.util.concurrent.ConcurrentLinkedQueue
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
@@ -55,6 +58,17 @@ class ArRenderer(
     private var tableFrame: TableFrame? = null
     private var gameType = GameType.POOL
 
+    // --- ball detection (Phase 2) ---
+    private val detector = BallDetector()
+    private val tracker = BallTracker()
+    private var trackedBalls: List<BallTracker.TrackedBall> = emptyList()
+    private var lastDetectionSubmitMs = 0L
+    private var viewportWidth = 1
+    private var viewportHeight = 1
+    private val inverseViewProjection = FloatArray(16)
+    private val scratch4 = FloatArray(4)
+    private val scratch4b = FloatArray(4)
+
     private var lastStatus = ""
 
     /** Screen tap from the UI thread; consumed on the GL thread. */
@@ -79,6 +93,8 @@ class ArRenderer(
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         displayRotationHelper.onSurfaceChanged(width, height)
         GLES20.glViewport(0, 0, width, height)
+        viewportWidth = width
+        viewportHeight = height
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -116,12 +132,20 @@ class ArRenderer(
             drawCornerMarkers()
             val frameNow = tableFrame
             if (frameNow != null) {
+                android.opengl.Matrix.invertM(inverseViewProjection, 0, viewProjection, 0)
+                ingestDetections(frame, frameNow)
+                maybeSubmitDetection(frame, frameNow)
+
                 drawTable(frameNow)
+                drawBalls(frameNow)
+
+                val dims = String.format("%.2f m × %.2f m", frameNow.widthMm / 1000.0, frameNow.lengthMm / 1000.0)
                 report(
-                    appContext.getString(
-                        R.string.status_table_locked,
-                        String.format("%.2f m × %.2f m", frameNow.widthMm / 1000.0, frameNow.lengthMm / 1000.0),
-                    ),
+                    if (trackedBalls.isEmpty()) {
+                        appContext.getString(R.string.status_table_locked, dims)
+                    } else {
+                        appContext.getString(R.string.status_balls_seen, dims, trackedBalls.size)
+                    },
                 )
             } else if (!planesTracked) {
                 report(appContext.getString(R.string.status_searching))
@@ -183,6 +207,140 @@ class ArRenderer(
         cornerAnchors.forEach { it.detach() }
         cornerAnchors.clear()
         tableFrame = null
+        tracker.clear()
+        trackedBalls = emptyList()
+    }
+
+    // ---- ball detection (Phase 2) ---------------------------------------------
+
+    /**
+     * Map any finished detection from image pixels to table space and feed
+     * the tracker. Mapping: image px → view px (ARCore's display transform)
+     * → NDC → unproject through the inverse view-projection → world ray →
+     * intersect the ball-centre plane (one radius above the cloth).
+     */
+    private fun ingestDetections(frame: Frame, table: TableFrame) {
+        val result = detector.takeResult() ?: return
+        if (result.balls.isEmpty()) {
+            trackedBalls = tracker.update(SystemClock.uptimeMillis(), emptyList())
+            return
+        }
+
+        val imagePx = FloatArray(result.balls.size * 2)
+        result.balls.forEachIndexed { i, b ->
+            imagePx[i * 2] = b.pixelX
+            imagePx[i * 2 + 1] = b.pixelY
+        }
+        val viewPx = FloatArray(imagePx.size)
+        frame.transformCoordinates2d(
+            Coordinates2d.IMAGE_PIXELS, imagePx,
+            Coordinates2d.VIEW, viewPx,
+        )
+
+        val ballRadiusMm = gameType.ballRadiusMm
+        val detections = mutableListOf<BallTracker.Detection>()
+        result.balls.forEachIndexed { i, ball ->
+            val ndcX = 2f * viewPx[i * 2] / viewportWidth - 1f
+            val ndcY = 1f - 2f * viewPx[i * 2 + 1] / viewportHeight
+            val (origin, dir) = unprojectRay(ndcX, ndcY) ?: return@forEachIndexed
+            val tablePos = table.ballCenterFromRay(origin, dir, ballRadiusMm) ?: return@forEachIndexed
+            detections += BallTracker.Detection(tablePos, ball.appearance)
+        }
+        trackedBalls = tracker.update(SystemClock.uptimeMillis(), detections)
+    }
+
+    /** Screen-NDC point → world-space ray, inverse of the rendering transform. */
+    private fun unprojectRay(ndcX: Float, ndcY: Float): Pair<Vec3, Vec3>? {
+        fun unproject(z: Float, out: FloatArray): Vec3? {
+            scratch4[0] = ndcX; scratch4[1] = ndcY; scratch4[2] = z; scratch4[3] = 1f
+            android.opengl.Matrix.multiplyMV(out, 0, inverseViewProjection, 0, scratch4, 0)
+            if (kotlin.math.abs(out[3]) < 1e-9f) return null
+            return Vec3(
+                (out[0] / out[3]).toDouble(),
+                (out[1] / out[3]).toDouble(),
+                (out[2] / out[3]).toDouble(),
+            )
+        }
+        val near = unproject(-1f, scratch4b) ?: return null
+        val far = unproject(1f, scratch4b) ?: return null
+        val dir = (far - near).normalizedOrNull() ?: return null
+        return near to dir
+    }
+
+    /** Grab + downsample a CPU frame and hand it to the background detector. */
+    private fun maybeSubmitDetection(frame: Frame, table: TableFrame) {
+        val now = SystemClock.uptimeMillis()
+        if (!detector.isIdle || now - lastDetectionSubmitMs < DETECTION_INTERVAL_MS) return
+
+        // Table polygon (slightly expanded) in view px, then image px.
+        val w = table.widthMm
+        val l = table.lengthMm
+        val cx = w / 2.0
+        val cy = l / 2.0
+        val corners = listOf(Vec2(0.0, 0.0), Vec2(w, 0.0), Vec2(w, l), Vec2(0.0, l)).map {
+            Vec2(cx + (it.x - cx) * 1.05, cy + (it.y - cy) * 1.05)
+        }
+        val viewPoly = FloatArray(8)
+        for (i in corners.indices) {
+            val world = table.toWorld(corners[i])
+            scratch4[0] = world.x.toFloat(); scratch4[1] = world.y.toFloat()
+            scratch4[2] = world.z.toFloat(); scratch4[3] = 1f
+            android.opengl.Matrix.multiplyMV(scratch4b, 0, viewProjection, 0, scratch4, 0)
+            if (scratch4b[3] <= 0f) return // corner behind the camera: skip this frame
+            val ndcX = scratch4b[0] / scratch4b[3]
+            val ndcY = scratch4b[1] / scratch4b[3]
+            viewPoly[i * 2] = (ndcX * 0.5f + 0.5f) * viewportWidth
+            viewPoly[i * 2 + 1] = (1f - (ndcY * 0.5f + 0.5f)) * viewportHeight
+        }
+        val imagePoly = FloatArray(8)
+        frame.transformCoordinates2d(
+            Coordinates2d.VIEW, viewPoly,
+            Coordinates2d.IMAGE_PIXELS, imagePoly,
+        )
+
+        // Expected ball radius in full-image pixels: fx · r / distance.
+        val camera = frame.camera
+        val camPos = camera.pose.toVec3()
+        val distance = camPos.distanceTo(table.toWorld(Vec2(cx, cy))).coerceAtLeast(0.2)
+        val fx = camera.imageIntrinsics.focalLength[0]
+        val radiusFullPx = (fx * (gameType.ballRadiusMm / 1000.0) / distance).toFloat()
+
+        val image = try {
+            frame.acquireCameraImage()
+        } catch (_: Exception) {
+            return // not yet available / resource pressure: try next frame
+        }
+        val small = try {
+            YuvDownsampler.downsample(image, targetWidth = 360)
+        } finally {
+            image.close()
+        }
+
+        val smallPoly = FloatArray(8) { imagePoly[it] / small.scaleToFull }
+        detector.submit(small, smallPoly, radiusFullPx / small.scaleToFull)
+        lastDetectionSubmitMs = now
+    }
+
+    /** Colour-coded dots hovering at each tracked ball's centre. */
+    private fun drawBalls(table: TableFrame) {
+        val balls = trackedBalls
+        if (balls.isEmpty()) return
+        val up = table.upNormal
+        val lift = gameType.ballRadiusMm / 1000.0
+
+        val position = FloatArray(3)
+        for (ball in balls) {
+            val world = table.toWorld(ball.position) + up * lift
+            position[0] = world.x.toFloat()
+            position[1] = world.y.toFloat()
+            position[2] = world.z.toFloat()
+            val rgb = ball.appearance.displayRgb
+            points.draw(
+                viewProjection, position, 1,
+                red = rgb[0], green = rgb[1], blue = rgb[2],
+                pointSizePx = 38f,
+            )
+        }
     }
 
     // ---- drawing -------------------------------------------------------------
@@ -262,5 +420,6 @@ class ArRenderer(
         const val FAR_CLIP = 100f
         const val GRID_STEP_MM = 250.0
         const val MIN_CORNER_SPACING_M = 0.25
+        const val DETECTION_INTERVAL_MS = 250L
     }
 }
