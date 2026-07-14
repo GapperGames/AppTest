@@ -1,0 +1,291 @@
+<title>PoolSight — Design Brief</title>
+<style>
+  :root {
+    /* Light theme — chalk & baize on paper */
+    --paper:      #f3f0e7;
+    --paper-2:    #ece7d8;
+    --ink:        #1a231d;
+    --ink-soft:   #4f5a50;
+    --line:       #d8d2c1;
+    --felt:       #14603f;   /* baize green */
+    --felt-deep:  #0c3f29;
+    --chalk:      #2f7d92;   /* cue chalk blue-teal */
+    --brass:      #b0863a;   /* pocket / cue tip brass */
+    --ivory:      #f6f1e2;   /* cue ball */
+    --danger:     #b1472f;
+    --card:       #fbf9f2;
+    --card-edge:  #e3ddcc;
+    --shadow:     rgba(20,40,30,.10);
+    --diagram-bg: #0e4a30;
+    --diagram-rail:#20140c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:     #0d130f;
+      --paper-2:   #101a14;
+      --ink:       #e9e7db;
+      --ink-soft:  #9aa79b;
+      --line:      #23342a;
+      --felt:      #2c9166;
+      --felt-deep: #0b3a26;
+      --chalk:     #6cc3da;
+      --brass:     #d9ab5c;
+      --ivory:     #f6f1e2;
+      --danger:    #e07a5f;
+      --card:      #121c16;
+      --card-edge: #22332a;
+      --shadow:    rgba(0,0,0,.4);
+      --diagram-bg:#0c4029;
+      --diagram-rail:#1a0f08;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#f3f0e7; --paper-2:#ece7d8; --ink:#1a231d; --ink-soft:#4f5a50;
+    --line:#d8d2c1; --felt:#14603f; --felt-deep:#0c3f29; --chalk:#2f7d92;
+    --brass:#b0863a; --ivory:#f6f1e2; --danger:#b1472f; --card:#fbf9f2;
+    --card-edge:#e3ddcc; --shadow:rgba(20,40,30,.10); --diagram-bg:#0e4a30; --diagram-rail:#20140c;
+  }
+  :root[data-theme="dark"] {
+    --paper:#0d130f; --paper-2:#101a14; --ink:#e9e7db; --ink-soft:#9aa79b;
+    --line:#23342a; --felt:#2c9166; --felt-deep:#0b3a26; --chalk:#6cc3da;
+    --brass:#d9ab5c; --ivory:#f6f1e2; --danger:#e07a5f; --card:#121c16;
+    --card-edge:#22332a; --shadow:rgba(0,0,0,.4); --diagram-bg:#0c4029; --diagram-rail:#1a0f08;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px 88px; }
+
+  /* Typography */
+  .display { font-family: Georgia, "Times New Roman", serif; }
+  h1 { font-family: Georgia, serif; font-weight: 700; letter-spacing: -.02em;
+       font-size: clamp(2.3rem, 8vw, 3.5rem); line-height: 1.02; margin: 0;
+       text-wrap: balance; }
+  h2 { font-family: Georgia, serif; font-weight: 700; letter-spacing: -.01em;
+       font-size: clamp(1.5rem, 4.5vw, 2rem); margin: 0 0 .2em; text-wrap: balance; }
+  h3 { font-size: 1.05rem; margin: 0 0 .35em; letter-spacing: -.005em; }
+  p  { margin: 0 0 1em; }
+  .eyebrow { font-size: .74rem; letter-spacing: .18em; text-transform: uppercase;
+             color: var(--chalk); font-weight: 700; margin: 0 0 .9rem; }
+  .lede { font-size: clamp(1.05rem, 2.6vw, 1.22rem); color: var(--ink-soft);
+          max-width: 60ch; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* Hero */
+  header { padding: clamp(48px, 9vw, 92px) 0 8px; }
+  .kicker-row { display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+  .cue-dot { width:11px; height:11px; border-radius:50%;
+             background: var(--ivory); box-shadow: 0 0 0 3px var(--felt), 0 2px 6px var(--shadow); flex:none; }
+  .kicker-row .eyebrow { margin:0; }
+
+  /* Table diagram */
+  figure { margin: 34px 0 0; }
+  .table-card {
+    background: var(--diagram-rail);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 10px 30px var(--shadow);
+  }
+  svg.tablefig { display:block; width:100%; height:auto; border-radius: 7px; }
+  figcaption { margin-top: 12px; font-size: .85rem; color: var(--ink-soft);
+               display:flex; flex-wrap:wrap; gap: 6px 18px; }
+  .leg { display:inline-flex; align-items:center; gap:7px; }
+  .swatch { width:22px; height:0; border-top-width:3px; border-top-style:solid; }
+  .dot-legend { width:11px; height:11px; border-radius:50%; }
+
+  /* Sections */
+  section { margin-top: clamp(44px, 8vw, 72px); }
+  .rule { height:1px; background: var(--line); border:0; margin: 0; }
+
+  /* Decision chips */
+  .decisions { display:grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr)); gap:14px; margin-top:24px; }
+  .chip { background: var(--card); border:1px solid var(--card-edge); border-radius:12px;
+          padding:16px 16px 15px; box-shadow: 0 2px 8px var(--shadow); }
+  .chip .lbl { font-size:.7rem; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); }
+  .chip .val { font-family:Georgia,serif; font-size:1.15rem; font-weight:700; margin-top:4px; color:var(--felt); }
+  :root[data-theme="dark"] .chip .val { color: var(--felt); }
+  .chip small { display:block; color:var(--ink-soft); font-size:.82rem; margin-top:5px; }
+
+  /* Pipeline */
+  .pipe { display:grid; gap:14px; margin-top:24px; }
+  .step { display:grid; grid-template-columns: 46px 1fr; gap:16px; align-items:start;
+          background: var(--card); border:1px solid var(--card-edge); border-radius:14px;
+          padding:18px 18px; box-shadow: 0 2px 8px var(--shadow); }
+  .step .num { font-family:Georgia,serif; font-size:1.5rem; font-weight:700; color:var(--chalk);
+               width:46px; height:46px; display:grid; place-items:center;
+               border:1px solid var(--card-edge); border-radius:10px; background:var(--paper-2); }
+  .step h3 { margin-bottom:.25em; }
+  .step p { margin:0; color:var(--ink-soft); font-size:.94rem; }
+
+  /* Maths callout */
+  .maths { background: var(--felt-deep); color: var(--ivory); border-radius:16px;
+           padding: clamp(22px,4vw,30px); margin-top:24px; box-shadow: 0 10px 30px var(--shadow); }
+  .maths .eyebrow { color: #9fe6c4; }
+  .maths h2 { color: var(--ivory); }
+  .maths p { color: #d7ecdf; }
+  .formula { font-family: ui-monospace, monospace; font-size: clamp(1rem,3vw,1.28rem);
+             background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.12);
+             border-radius:10px; padding:16px 18px; margin:16px 0; overflow-x:auto;
+             color:#eafff2; letter-spacing:.01em; }
+  .formula b { color: #9fe6c4; }
+
+  /* Roadmap timeline */
+  .timeline { margin-top: 26px; display:grid; gap: 0; }
+  .phase { display:grid; grid-template-columns: 70px 1fr; gap: 18px; padding: 4px 0; position:relative; }
+  .phase .tag { font-family:ui-monospace,monospace; font-weight:700; font-size:.86rem;
+                color: var(--brass); padding-top: 14px; }
+  .phase .body { border-left: 2px solid var(--line); padding: 14px 0 22px 22px; position:relative; }
+  .phase .body::before { content:""; position:absolute; left:-7px; top:18px; width:12px; height:12px;
+                         border-radius:50%; background:var(--chalk); box-shadow:0 0 0 4px var(--paper); }
+  .phase:last-child .body { border-left-color: transparent; }
+  .phase h3 { margin-bottom:.2em; }
+  .phase p { margin:0; color:var(--ink-soft); font-size:.92rem; }
+  .phase .done { display:inline-block; margin-top:8px; font-size:.8rem; color:var(--felt);
+                 background: color-mix(in srgb, var(--felt) 12%, transparent); border-radius:6px;
+                 padding:3px 9px; }
+  :root[data-theme="dark"] .phase .done { color: #9fe6c4; }
+
+  /* Limits */
+  .limits { list-style:none; padding:0; margin:22px 0 0; display:grid; gap:12px; }
+  .limits li { display:grid; grid-template-columns: 26px 1fr; gap:12px; align-items:start;
+               font-size:.95rem; color:var(--ink-soft); }
+  .limits .mk { color: var(--danger); font-weight:700; font-family:Georgia,serif; }
+
+  .foot { margin-top: 56px; padding-top: 22px; border-top:1px solid var(--line);
+          font-size:.88rem; color:var(--ink-soft); }
+  .foot code { background: var(--paper-2); padding:2px 7px; border-radius:5px; font-size:.85em; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker-row">
+      <span class="cue-dot" aria-hidden="true"></span>
+      <p class="eyebrow">Design Brief · Phase One · No Code Yet</p>
+    </div>
+    <h1>PoolSight</h1>
+    <p class="lede display" style="font-style:italic; color:var(--ink); margin-top:14px;">
+      Point your phone at the table. Pick the ball and the pocket. See exactly
+      where to aim — drawn on the real cloth.</p>
+
+    <figure>
+      <div class="table-card">
+        <svg class="tablefig" viewBox="0 0 400 220" role="img"
+             aria-label="Top-down pool table showing the cue ball, an aim line to the ghost ball, and the object ball's path into the top-right corner pocket.">
+          <!-- felt -->
+          <rect x="0" y="0" width="400" height="220" rx="10" fill="var(--diagram-rail)"/>
+          <rect x="20" y="20" width="360" height="180" rx="4" fill="var(--diagram-bg)"/>
+          <!-- pockets -->
+          <g fill="#0a0a0a">
+            <circle cx="20"  cy="20"  r="10"/><circle cx="200" cy="16"  r="9"/>
+            <circle cx="380" cy="20"  r="10"/><circle cx="20"  cy="200" r="10"/>
+            <circle cx="200" cy="204" r="9"/><circle cx="380" cy="200" r="10"/>
+          </g>
+          <!-- object path O -> pocket (dashed) -->
+          <line x1="250" y1="110" x2="373" y2="27" stroke="#d9ab5c" stroke-width="2.4"
+                stroke-dasharray="7 6" stroke-linecap="round"/>
+          <!-- aim line C -> ghost -->
+          <line x1="110" y1="150" x2="233" y2="120" stroke="#6cc3da" stroke-width="2.6" stroke-linecap="round"/>
+          <!-- ghost ball -->
+          <circle cx="233" cy="120" r="9" fill="none" stroke="#eafff2" stroke-width="1.6" stroke-dasharray="3 3" opacity=".8"/>
+          <!-- contact spot -->
+          <circle cx="242" cy="115" r="2.6" fill="#e07a5f"/>
+          <!-- object ball -->
+          <circle cx="250" cy="110" r="9" fill="#b0863a" stroke="#00000030" stroke-width="1"/>
+          <!-- cue ball -->
+          <circle cx="110" cy="150" r="9" fill="#f6f1e2" stroke="#00000030" stroke-width="1"/>
+          <!-- labels -->
+          <g font-family="ui-monospace, monospace" font-size="10" fill="#eafff2">
+            <text x="110" y="176" text-anchor="middle" opacity=".9">cue</text>
+            <text x="250" y="96"  text-anchor="middle" opacity=".9">object</text>
+            <text x="214" y="139" text-anchor="middle" opacity=".7">ghost</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>
+        <span class="leg"><span class="swatch" style="border-top-color:#6cc3da"></span>aim line (cue → ghost)</span>
+        <span class="leg"><span class="swatch" style="border-top-color:#d9ab5c; border-top-style:dashed"></span>ball path → pocket</span>
+        <span class="leg"><span class="dot-legend" style="background:#e07a5f"></span>contact spot</span>
+      </figcaption>
+    </figure>
+  </header>
+
+  <section aria-labelledby="dec">
+    <p class="eyebrow">What we locked in</p>
+    <h2 id="dec">Four decisions that shape everything</h2>
+    <div class="decisions">
+      <div class="chip"><div class="lbl">Games</div><div class="val">Pool + Snooker</div><small>Pool ships first — its colours are far easier for the camera to read.</small></div>
+      <div class="chip"><div class="lbl">Platform</div><div class="val">Native Android</div><small>Kotlin + Google ARCore + OpenCV. Lean, no game engine.</small></div>
+      <div class="chip"><div class="lbl">Shots (v1)</div><div class="val">Direct + Bank</div><small>Straight pots and one-cushion banks. Spin comes later.</small></div>
+      <div class="chip"><div class="lbl">Goal</div><div class="val">Real Prototype</div><small>Genuinely useful accuracy on a real table — for you, not the app store.</small></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="how">
+    <p class="eyebrow">How it works</p>
+    <h2 id="how">Four stages, camera to cloth</h2>
+    <p class="lede" style="font-size:1rem; margin-bottom:6px;">The trick: all the aiming maths happens in a clean, flat <em>top-down</em> view of the table — never in the distorted camera image.</p>
+    <div class="pipe">
+      <div class="step"><div class="num">A</div><div>
+        <h3>Find &amp; lock the table</h3>
+        <p>Detect the felt rectangle, then let you drag the four corners to sit exactly on the cushions. This one human touch removes the biggest source of aiming error and builds the top-down coordinate map.</p></div></div>
+      <div class="step"><div class="num">B</div><div>
+        <h3>Find the balls</h3>
+        <p>Inside the felt, non-cloth blobs are balls. Because we know how big a ball <em>should</em> look, false positives mostly vanish. Each ball gets a precise position and a type — cue, solid, stripe, or a snooker colour.</p></div></div>
+      <div class="step"><div class="num">C</div><div>
+        <h3>Solve the shot</h3>
+        <p>Pure geometry: the ghost-ball method for direct pots, the mirror trick for banks, plus checks for cut angle, blocked paths, and whether the pocket is even makeable.</p></div></div>
+      <div class="step"><div class="num">D</div><div>
+        <h3>Draw it on the table</h3>
+        <p>ARCore keeps the overlay glued to the real cloth as you move: aim line, ghost ball, contact spot, the ball's path, and a difficulty read-out.</p></div></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="math">
+    <div class="maths">
+      <p class="eyebrow">The core idea</p>
+      <h2 id="math">The ghost ball</h2>
+      <p>To sink a ball, it must set off straight toward the pocket. So the cue ball has to strike it on the exact opposite side. The <b>ghost ball</b> is where the cue ball's centre needs to end up at the moment of contact — one full ball-width behind the object ball, away from the pocket.</p>
+      <div class="formula">G = O + 2r · <b>unit</b>(O − P)</div>
+      <p style="margin-bottom:0; font-size:.92rem; opacity:.9;">Aim the cue ball straight at <b>G</b>, and the object ball rolls toward the pocket <b>P</b>. Everything else — the cut angle, bank shots, difficulty — builds on this one line.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="road">
+    <p class="eyebrow">The build plan</p>
+    <h2 id="road">Eight phases, each one runnable</h2>
+    <p class="lede" style="font-size:1rem;">No big-bang reveal. Every phase produces something you can hold and judge. The aiming maths gets proven on a laptop before the camera is ever involved.</p>
+    <div class="timeline">
+      <div class="phase"><div class="tag">P0</div><div class="body"><h3>Skeleton</h3><p>App runs; ARCore locks onto a surface.</p><span class="done">Done when: a marker stays put as you move.</span></div></div>
+      <div class="phase"><div class="tag">P1</div><div class="body"><h3>Calibrate</h3><p>Corner-drag calibration builds the top-down map.</p><span class="done">Done when: a test grid lies flat on the cloth.</span></div></div>
+      <div class="phase"><div class="tag">P2</div><div class="body"><h3>See the balls</h3><p>Detect and label pool balls, live.</p><span class="done">Done when: balls get the right highlight, steadily.</span></div></div>
+      <div class="phase"><div class="tag">P3</div><div class="body"><h3>The maths</h3><p>Ghost-ball engine in pure Kotlin, unit-tested.</p><span class="done">Done when: tests are green and the aim line agrees with your eye.</span></div></div>
+      <div class="phase"><div class="tag">P4</div><div class="body"><h3>Make it look right</h3><p>Full overlay: ghost ball, contact spot, path, difficulty.</p><span class="done">Done when: a stranger reads the shot at a glance.</span></div></div>
+      <div class="phase"><div class="tag">P5</div><div class="body"><h3>Bank shots</h3><p>Mirror-trick banks + obstruction checks.</p><span class="done">Done when: a one-cushion path draws and verifies.</span></div></div>
+      <div class="phase"><div class="tag">P6</div><div class="body"><h3>Snooker mode</h3><p>Six colours + the tricky pack of reds.</p><span class="done">Done when: colours ID and reds give usable lines.</span></div></div>
+      <div class="phase"><div class="tag">P7</div><div class="body"><h3>Polish</h3><p>Freeze mode, settings, robustness in real lighting.</p><span class="done">Done when: you reach for it on your own table.</span></div></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="lim">
+    <p class="eyebrow">Straight talk</p>
+    <h2 id="lim">Where it's honest about its limits</h2>
+    <ul class="limits">
+      <li><span class="mk">—</span><span><strong>It's an aid, not a guarantee.</strong> It gives the perfect line; you still have to deliver a straight stroke.</span></li>
+      <li><span class="mk">—</span><span><strong>Bank shots are estimates.</strong> Real cushions bend the angle with speed and spin. Banks carry a clear "estimate" label.</span></li>
+      <li><span class="mk">—</span><span><strong>You can't cue while filming.</strong> So there's a <em>freeze</em> step — line it up, freeze, then set the phone down and play.</span></li>
+      <li><span class="mk">—</span><span><strong>Fairness.</strong> Aiming aids are banned in most competitive play. This is for practice and casual games.</span></li>
+    </ul>
+  </section>
+
+  <div class="foot">
+    <p><strong>One thing I still need from you:</strong> which <strong>Android phone</strong> is this for? It decides ARCore support and how much camera detail we get to work with — needed before we write the first line of code.</p>
+    <p>Full write-up lives in the repo on branch <code>claude/ar-pool-cheat-design-hi5334</code>: <code>docs/00-overview.md</code>, <code>docs/01-design-spec.md</code>, <code>docs/02-implementation-roadmap.md</code>.</p>
+  </div>
+</div>
