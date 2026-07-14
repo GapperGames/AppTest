@@ -240,6 +240,12 @@ class MainActivity : Activity() {
                     updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
                     focusMode = Config.FocusMode.AUTO
                     lightEstimationMode = Config.LightEstimationMode.DISABLED
+                    // Pool cloth is nearly featureless, so plane detection can
+                    // fail outright. Depth (supported on the S22+) lets corner
+                    // taps land on the cloth without a detected plane.
+                    if (newSession.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                        depthMode = Config.DepthMode.AUTOMATIC
+                    }
                 },
             )
             session = newSession

@@ -6,9 +6,12 @@ import android.opengl.GLSurfaceView
 import android.os.SystemClock
 import com.google.ar.core.Anchor
 import com.google.ar.core.Coordinates2d
+import com.google.ar.core.DepthPoint
 import com.google.ar.core.Frame
 import com.google.ar.core.Plane
+import com.google.ar.core.Point
 import com.google.ar.core.Session
+import com.google.ar.core.TrackingFailureReason
 import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.poolsight.geometry.Ball
@@ -128,7 +131,18 @@ class ArRenderer(
             val camera = frame.camera
             if (camera.trackingState != TrackingState.TRACKING) {
                 pendingTaps.clear()
-                report(appContext.getString(R.string.status_move_phone))
+                // Say WHY tracking is struggling, not just "move the phone".
+                report(
+                    when (camera.trackingFailureReason) {
+                        TrackingFailureReason.INSUFFICIENT_LIGHT ->
+                            appContext.getString(R.string.status_tracking_dark)
+                        TrackingFailureReason.EXCESSIVE_MOTION ->
+                            appContext.getString(R.string.status_tracking_motion)
+                        TrackingFailureReason.INSUFFICIENT_FEATURES ->
+                            appContext.getString(R.string.status_tracking_features)
+                        else -> appContext.getString(R.string.status_move_phone)
+                    },
+                )
                 return
             }
 
@@ -138,9 +152,6 @@ class ArRenderer(
 
             handleTaps(frame)
             refitTableIfReady()
-
-            val planesTracked = session.getAllTrackables(Plane::class.java)
-                .any { it.trackingState == TrackingState.TRACKING && it.subsumedBy == null }
 
             drawCornerMarkers()
             val frameNow = tableFrame
@@ -156,16 +167,17 @@ class ArRenderer(
                 val shotStatus = solveAndDrawShot(frameNow)
 
                 val dims = String.format("%.2f m × %.2f m", frameNow.widthMm / 1000.0, frameNow.lengthMm / 1000.0)
-                val base = shotStatus ?: if (trackedBalls.isEmpty()) {
+                val base = currentTransient() ?: shotStatus ?: if (trackedBalls.isEmpty()) {
                     appContext.getString(R.string.status_table_locked, dims)
                 } else {
                     appContext.getString(R.string.status_balls_seen, dims, trackedBalls.size)
                 }
                 report(if (frozen) appContext.getString(R.string.frozen_status, base) else base)
-            } else if (!planesTracked) {
-                report(appContext.getString(R.string.status_searching))
             } else {
-                report(appContext.getString(R.string.status_tap_corner, cornerAnchors.size + 1))
+                report(
+                    currentTransient()
+                        ?: appContext.getString(R.string.status_tap_corner, cornerAnchors.size + 1),
+                )
             }
         } catch (e: CameraNotAvailableException) {
             report(appContext.getString(R.string.status_camera_unavailable))
@@ -186,12 +198,25 @@ class ArRenderer(
                 continue
             }
 
-            val hit = frame.hitTest(tap[0], tap[1]).firstOrNull { h ->
+            // Prefer a proper plane hit, but pool cloth is often too
+            // featureless for ARCore to ever produce a Plane — depth points
+            // (S22+ has depth support) and feature points work fine, since
+            // the corner fit only needs four 3D positions and validates the
+            // shape itself.
+            val hits = frame.hitTest(tap[0], tap[1])
+            val hit = hits.firstOrNull { h ->
                 val plane = h.trackable as? Plane ?: return@firstOrNull false
                 plane.type == Plane.Type.HORIZONTAL_UPWARD_FACING &&
                     plane.trackingState == TrackingState.TRACKING &&
                     plane.isPoseInPolygon(h.hitPose)
-            } ?: continue
+            }
+                ?: hits.firstOrNull { it.trackable is DepthPoint }
+                ?: hits.firstOrNull { it.trackable is Point }
+
+            if (hit == null) {
+                setTransient(appContext.getString(R.string.status_tap_missed))
+                continue
+            }
 
             val position = hit.hitPose.toVec3()
             // Ignore accidental double-taps on an existing corner.
@@ -246,7 +271,7 @@ class ArRenderer(
         val ball = trackedBalls.minByOrNull { it.position.distanceTo(tapPos) }
         if (ball != null && ball.position.distanceTo(tapPos) < BALL_PICK_MM) {
             if (ball.appearance.ballClass == BallClass.CUE) {
-                transientStatus = appContext.getString(R.string.status_thats_cue)
+                setTransient(appContext.getString(R.string.status_thats_cue))
             } else {
                 selectedBallId = ball.id
                 selectedPocketIndex = null
@@ -273,20 +298,22 @@ class ArRenderer(
     private var transientStatus: String? = null
     private var transientStatusUntilMs = 0L
 
+    private fun setTransient(message: String) {
+        transientStatus = message
+        transientStatusUntilMs = SystemClock.uptimeMillis() + 2500
+    }
+
+    private fun currentTransient(): String? {
+        if (SystemClock.uptimeMillis() >= transientStatusUntilMs) return null
+        return transientStatus
+    }
+
     /**
      * Solve the selected shot against current ball positions and draw the
      * overlay. Returns the status line to show, or null when no shot is
      * in progress.
      */
     private fun solveAndDrawShot(table: TableFrame): String? {
-        val now = SystemClock.uptimeMillis()
-        transientStatus?.let {
-            if (transientStatusUntilMs == 0L) transientStatusUntilMs = now + 2500
-            if (now < transientStatusUntilMs) return it
-            transientStatus = null
-            transientStatusUntilMs = 0L
-        }
-
         val objectId = selectedBallId ?: return null
         val objectBall = trackedBalls.firstOrNull { it.id == objectId }
         if (objectBall == null) {

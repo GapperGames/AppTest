@@ -3,8 +3,11 @@
     <string name="app_name">PoolSight</string>
     <string name="status_starting">Starting camera…</string>
     <string name="status_move_phone">Move the phone slowly over the table…</string>
-    <string name="status_searching">Looking for a flat surface — sweep slowly across the table</string>
-    <string name="status_tap_corner">Table found — tap corner %1$d of 4 (the inside corner of the cushions, going around the table)</string>
+    <string name="status_tap_corner">Tap corner %1$d of 4 — the inside cushion corner. Walk around the table for each; if taps don\'t land, sweep the phone over the rails first</string>
+    <string name="status_tap_missed">Tap didn\'t land — sweep the phone slowly over the table (the rails and pockets help AR map it), then try again</string>
+    <string name="status_tracking_dark">Too dark for AR — more light on the table will fix this</string>
+    <string name="status_tracking_motion">Moving too fast — hold the phone steadier</string>
+    <string name="status_tracking_features">Struggling to map the view — aim at the rails/pockets and sweep slowly (plain cloth is hard for AR)</string>
     <string name="status_table_locked">Table locked ✓ %1$s — the grid should hug the cloth</string>
     <string name="status_balls_seen">Table %1$s ✓ — %2$d ball(s) — tap the ball you want to pot</string>
     <string name="status_select_pocket">Now tap the pocket you want it to go in</string>
