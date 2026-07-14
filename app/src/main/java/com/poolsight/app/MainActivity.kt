@@ -2,12 +2,14 @@ package com.poolsight.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
 import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.google.ar.core.ArCoreApk
@@ -29,14 +31,38 @@ class MainActivity : Activity() {
 
     private lateinit var surfaceView: GLSurfaceView
     private lateinit var statusText: TextView
-    private val renderer = ArRenderer(this) { status -> setStatus(status) }
+    private lateinit var renderer: ArRenderer
 
     private var session: Session? = null
     private var arCoreInstallRequested = false
 
+    /** True when we're showing the crash screen instead of the AR view. */
+    private var showingCrash = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Crash safety net: record any uncaught error to disk, so that if the
+        // app dies we can show its cause on the next launch (phone-only
+        // debugging — no logcat needed).
+        installCrashCatcher()
+        if (showLastCrashIfAny()) return
+
+        try {
+            buildUi()
+        } catch (t: Throwable) {
+            saveCrash(t)
+            showCrashScreen(t.stackTraceToString())
+        }
+    }
+
+    private fun buildUi() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // Build the renderer here, not as a field initializer: it queries a
+        // system service (the display), which is only available once the
+        // Activity has a valid context — i.e. after super.onCreate().
+        renderer = ArRenderer(this) { status -> setStatus(status) }
 
         surfaceView = GLSurfaceView(this).apply {
             preserveEGLContextOnPause = true
@@ -69,6 +95,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (showingCrash) return
         if (!hasCameraPermission()) {
             requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_CODE)
             return
@@ -88,6 +115,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        if (showingCrash) return
         if (session != null) {
             renderer.displayRotationHelper.onPause()
             surfaceView.onPause()
@@ -99,6 +127,59 @@ class MainActivity : Activity() {
         session?.close()
         session = null
         super.onDestroy()
+    }
+
+    // ---- crash safety net --------------------------------------------------
+
+    /** Persist any uncaught exception (from any thread) for next-launch display. */
+    private fun installCrashCatcher() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            saveCrash(throwable)
+            previous?.uncaughtException(thread, throwable)
+        }
+    }
+
+    private fun saveCrash(t: Throwable) {
+        try {
+            getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(CRASH_KEY, t.stackTraceToString())
+                .commit()
+        } catch (_: Throwable) {
+            // Never let crash reporting itself crash.
+        }
+    }
+
+    /** If a crash was recorded last run, show it and return true. */
+    private fun showLastCrashIfAny(): Boolean {
+        val prefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+        val last = prefs.getString(CRASH_KEY, null) ?: return false
+        prefs.edit().remove(CRASH_KEY).apply()
+        showCrashScreen(last)
+        return true
+    }
+
+    private fun showCrashScreen(details: String) {
+        showingCrash = true
+        val message = TextView(this).apply {
+            text = "PoolSight hit an error last time.\n\n" +
+                "Please screenshot this and send it back — it tells me exactly " +
+                "what to fix.\n\n----\n$details"
+            setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0xFF14603F.toInt())
+            textSize = 13f
+            setPadding(40, 80, 40, 40)
+            setTextIsSelectable(true)
+        }
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(0xFF14603F.toInt())
+            addView(message)
+        }
+        setContentView(scroll, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
+        ))
     }
 
     /** Create the ARCore session, walking the Play-Services-for-AR install flow. */
@@ -151,6 +232,7 @@ class MainActivity : Activity() {
         checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     private fun setStatus(status: String) {
+        if (!::statusText.isInitialized) return
         runOnUiThread {
             if (statusText.text != status) statusText.text = status
         }
@@ -158,5 +240,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val CAMERA_PERMISSION_CODE = 1
+        private const val CRASH_PREFS = "poolsight_crash"
+        private const val CRASH_KEY = "last_crash"
     }
 }
