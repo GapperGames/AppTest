@@ -1,8 +1,8 @@
 name: Android CI
 
-# Builds the installable APK in the cloud. To get PoolSight on your phone:
-# open this repo on your phone → Actions tab → newest green run →
-# download the "PoolSight-debug-apk" artifact → unzip → install the APK.
+# Builds the installable APK in the cloud AND publishes it as a GitHub Release,
+# so the app can be installed with a single tap on a direct download link —
+# no login, no unzipping. See the "Releases" section of the repo.
 on:
   push:
     branches:
@@ -10,6 +10,10 @@ on:
       - main
       - "claude/**"
   workflow_dispatch:
+
+# Needed so the workflow can create/update the Release.
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -34,12 +38,31 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
 
-      - name: Upload APK artifact
+      - name: Rename APK to a friendly name
+        run: cp app/build/outputs/apk/debug/app-debug.apk PoolSight.apk
+
+      - name: Upload APK artifact (backup download route)
         uses: actions/upload-artifact@v4
         with:
           name: PoolSight-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: PoolSight.apk
           retention-days: 30
+
+      - name: Publish APK as a one-tap Release download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-android
+          name: "PoolSight — latest app (tap PoolSight.apk to install)"
+          body: |
+            The newest PoolSight build for your Android phone.
+
+            **To install:** tap **PoolSight.apk** below. Your phone will
+            download it and offer to install — allow installs from your
+            browser if it asks.
+
+            This release is replaced automatically each time the app is updated.
+          prerelease: true
+          files: PoolSight.apk
 
       - name: Upload test reports on failure
         if: failure()
