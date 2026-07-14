@@ -1,0 +1,203 @@
+# 02 — Implementation Roadmap
+
+How we'll actually build PoolSight, in order, so that **every phase produces
+something we can run and check** rather than a big-bang reveal at the end. Each
+phase lists its goal, the work, and a concrete "done when…" test.
+
+We are still in the **design phase** — nothing below is built yet. This is the
+map we'll follow once you say "start coding."
+
+---
+
+## Guiding principles
+
+1. **Prove the maths without a phone first.** The `geometry` module is pure
+   Kotlin — we can build and unit-test the entire aiming brain on a laptop
+   before touching a camera. Correctness is settled there.
+2. **Each phase is runnable.** Never more than one phase away from something you
+   can hold in your hand and judge.
+3. **Pool before snooker. Direct before banks. Canvas before Filament.** Ship
+   the easy, high-value core; add hard parts behind interfaces.
+4. **Test on a real table early and often.** The lab lies; the felt tells the
+   truth.
+
+---
+
+## Phase map (at a glance)
+
+```
+ P0  Project skeleton + ARCore "hello plane"        ── it runs on the phone
+ P1  Table calibration + homography                 ── a drawn grid sits on the cloth
+ P2  Ball detection & classification (pool)          ── balls get highlighted live
+ P3  Aiming engine — direct shots (pure Kotlin)      ── green unit tests + aim line
+ P4  AR overlay polish (ghost ball, contact, path)   ── it looks like the product
+ P5  Bank shots + obstruction + difficulty           ── banks draw & get checked
+ P6  Snooker mode                                     ── reds handled, colours ID'd
+ P7  UX polish, freeze mode, settings, robustness     ── daily-usable prototype
+```
+
+Rough shape: P0–P4 gets you a genuinely useful direct-shot pool aid. P5 adds the
+banks you asked for. P6–P7 round it out.
+
+---
+
+## Phase 0 — Project skeleton & ARCore hello-world
+
+**Goal:** an installable app that opens the camera and shows ARCore is tracking.
+
+- Android Studio project, Kotlin, min-SDK chosen for ARCore support.
+- Add ARCore + OpenCV (or the org.opencv dependency) + CameraX.
+- Camera permission flow.
+- ARCore session that detects a horizontal plane and draws a debug dot on it.
+- Set up the module folders from spec §9 (empty but wired).
+
+**Done when:** you install it, point at the floor/table, and see ARCore lock
+onto the surface with a debug marker that stays put as you move.
+
+**Needs from you:** the **phone model** (to confirm ARCore support & pick
+min-SDK / camera settings).
+
+---
+
+## Phase 1 — Table calibration & the homography
+
+**Goal:** turn "a table in the camera" into a precise top-down coordinate
+system.
+
+- Felt colour segmentation (HSV) → largest quadrilateral → 4 corners.
+- Calibration screen: draggable corner handles over a frozen frame.
+- Game-type + table-size picker → real-world rectangle dimensions.
+- Compute homography `H` (image ⇄ table space).
+- Drop the ARCore anchor at the origin corner, axes aligned to table edges.
+- **Debug proof:** draw a regular grid *in table space* and render it back onto
+  the live view.
+
+**Done when:** the drawn grid lines lie convincingly along the cloth and rails,
+and stay glued as you move the phone. That means `H` and the anchor are right.
+
+---
+
+## Phase 2 — Ball detection & classification (pool)
+
+**Goal:** find balls and label them, live.
+
+- Restrict processing to the felt rectangle (ROI).
+- Subtract felt colour → candidate blobs; filter by expected size (from `H`)
+  and roundness; sub-pixel centroids.
+- Map centers through `H` → table-space positions.
+- Classify: cue (white), solids, stripes (white-band variance), 8-ball.
+- Temporal smoothing across frames; run detection throttled off-thread.
+- Overlay a coloured ring + label on each detected ball.
+
+**Done when:** on a real pool table, balls get highlighted with the right
+type most of the time, and the highlights sit steadily on the balls without
+much jitter.
+
+---
+
+## Phase 3 — Aiming engine: direct shots (pure Kotlin, no device)
+
+**Goal:** the aiming brain, provably correct, before any AR of it.
+
+- `geometry` module, zero Android deps.
+- Implement: ghost ball `G`, aim direction, contact spot, cut angle, cut
+  fraction, feasibility (ghost reachable, cue/object paths clear, pocket
+  approach).
+- **Unit tests** with hand-computed cases: straight pot, 30°/45° cuts,
+  blocked-path cases, off-table ghost cases.
+- Wire selection UI: tap object ball → tap pocket → engine runs → draw a first
+  raw aim line and ghost circle via the Phase-1/2 plumbing.
+
+**Done when:** the geometry unit-test suite is green against hand-worked
+numbers, **and** tapping a ball + pocket on the real table draws an aim line
+that points where your own eyes agree it should.
+
+---
+
+## Phase 4 — AR overlay polish
+
+**Goal:** make it *look* like the product from the overview picture.
+
+- Full overlay set: bold aim line (C→G), dashed object path (O→P), faint ghost
+  ball at G, contact-spot dot, selection highlights, floating cut-angle +
+  difficulty label.
+- Clean visual styling; perspective-correct via project-the-points method.
+- Handle "blocked shot" visuals (red X, greyed line).
+
+**Done when:** a stranger glancing at your screen understands the shot the app
+is recommending, and it tracks smoothly as you move.
+
+---
+
+## Phase 5 — Bank shots, obstruction, difficulty
+
+**Goal:** the banks you asked for, plus the safety checks that make suggestions
+trustworthy.
+
+- Bank engine (spec §5.4): reflect pocket across each cushion → virtual pocket →
+  direct-shot solve → validate bounce point on the real cushion segment.
+- Render two-segment object path O→B→P with the "geometric estimate" badge.
+- Full obstruction checks on both legs; pocket-approach feasibility.
+- Difficulty read-out (angle + distance → green/amber/red).
+- **Unit tests** for the reflection maths and bounce-point validation.
+
+**Done when:** you pick a ball, toggle banks on, and see a plausible one-cushion
+path drawn and checked for obstructions — verified against a few real banks on
+the table.
+
+---
+
+## Phase 6 — Snooker mode
+
+**Goal:** add snooker as a mode.
+
+- Snooker table size + 6-pocket layout + snooker ball dimensions.
+- Colour classification for the six colours + white; "red vs not" logic.
+- **Red-cluster handling:** split touching reds (distance transform / watershed)
+  or, pragmatically, treat a red cluster as "aim at the nearest red in the blob"
+  with a caveat. Decide based on how bad the clustering is in practice.
+
+**Done when:** on a snooker table the app identifies the colours correctly and
+gives usable aim lines for reds that aren't buried in the pack.
+
+---
+
+## Phase 7 — UX polish, freeze mode, settings, robustness
+
+**Goal:** turn the working demo into something you'll actually reach for.
+
+- Freeze mode fully wired (lock solution, stop detection, battery-friendly).
+- Phone-stand-friendly layout; big tap targets; minimal controls.
+- Settings: default game/table, cloth colour, units, bank on/off.
+- Robustness pass: lighting variation, glare, re-calibration prompts on drift,
+  graceful "can't see the table" messaging.
+- Optional: the **TFLite ball detector** upgrade if classic CV isn't robust
+  enough in your usual lighting.
+
+**Done when:** you can walk up to your table, calibrate in a few seconds, and
+get trustworthy aim help on real shots without fighting the app.
+
+---
+
+## What we need from you before Phase 0
+
+| Needed | Why | Blocking? |
+|--------|-----|-----------|
+| **Phone model** | Confirm ARCore support; set min-SDK & camera res | Yes, for P0 |
+| Your usual table (size + cloth colour) | Tune calibration defaults | No — has defaults |
+| A go-ahead to start coding | We're design-only right now | Yes |
+
+## Cross-cutting concerns tracked throughout
+
+- **Performance/battery** — throttled detection, freeze mode, ROI (spec §7).
+- **Testability** — geometry unit tests; vision tested on saved photos.
+- **Interfaces for upgrades** — detector (CV→ML) and renderer (Canvas→Filament)
+  behind interfaces from the start, so upgrades don't mean rewrites.
+- **Honest labelling** — estimates (banks) and unmodeled effects (spin/throw)
+  always surfaced, never hidden.
+
+---
+
+*This roadmap is a living plan; we'll refine phase details as we learn from real
+tables. Design docs: [00-overview.md](00-overview.md) ·
+[01-design-spec.md](01-design-spec.md).*
