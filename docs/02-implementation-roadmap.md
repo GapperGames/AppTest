@@ -59,21 +59,33 @@ min-SDK / camera settings).
 
 ---
 
-## Phase 1 — Table calibration & the homography
+## Phase 1 — Table calibration
 
 **Goal:** turn "a table in the camera" into a precise top-down coordinate
 system.
 
-- Felt colour segmentation (HSV) → largest quadrilateral → 4 corners.
-- Calibration screen: draggable corner handles over a frozen frame.
-- Game-type + table-size picker → real-world rectangle dimensions.
-- Compute homography `H` (image ⇄ table space).
-- Drop the ARCore anchor at the origin corner, axes aligned to table edges.
-- **Debug proof:** draw a regular grid *in table space* and render it back onto
-  the live view.
+> **Design refinement (14 Jul 2026):** calibration is done by **tapping the
+> four cushion corners in AR** (ARCore hit-tests) rather than felt-colour
+> segmentation + homography. Rationale: ARCore hits are metric, so the table's
+> real dimensions are *measured* from the taps — no table-size picker, no
+> HSV tuning, fewer failure modes. Each corner gets its own ARCore anchor and
+> the frame is refitted every frame, so the grid self-corrects as tracking
+> refines. Felt auto-detection can return later as a convenience layer.
+> The image→table homography returns in Phase 2, derived from the camera pose
+> rather than detected corners.
+
+- Guided flow: find surface → tap the 4 inside cushion corners → locked.
+- `TableFrame` (geometry module): fits origin/axes/dimensions from 4 corners,
+  validates shape (convexity, opposite-edge agreement), maps world ⇄ table mm.
+  Unit-tested (rotation/translation invariance, noisy taps, degenerate input).
+- Corner pins, table outline, 250 mm grid, and 6 derived pocket markers drawn
+  on the cloth; ↺ Reset button to redo the corners.
+- **Debug proof:** the rendered grid lies flat along the cloth and rails.
 
 **Done when:** the drawn grid lines lie convincingly along the cloth and rails,
-and stay glued as you move the phone. That means `H` and the anchor are right.
+and stay glued as you move the phone.
+
+**Status: code-complete (v0.3), awaiting on-table verification by the owner.**
 
 ---
 

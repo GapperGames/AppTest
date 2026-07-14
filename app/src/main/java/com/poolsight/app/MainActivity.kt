@@ -70,6 +70,14 @@ class MainActivity : Activity() {
             setEGLConfigChooser(8, 8, 8, 8, 16, 0)
             setRenderer(renderer)
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+            setOnClickListener { } // accessibility: clicks handled via touch below
+            setOnTouchListener { v, event ->
+                if (event.action == android.view.MotionEvent.ACTION_UP) {
+                    renderer.onTap(event.x, event.y)
+                    v.performClick()
+                }
+                true
+            }
         }
 
         statusText = TextView(this).apply {
@@ -78,6 +86,15 @@ class MainActivity : Activity() {
             setBackgroundColor(0xAA14603F.toInt())
             textSize = 16f
             setPadding(40, 24, 40, 24)
+        }
+
+        val resetButton = TextView(this).apply {
+            text = getString(R.string.btn_reset_corners)
+            setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0xCC14603F.toInt())
+            textSize = 16f
+            setPadding(56, 28, 56, 28)
+            setOnClickListener { renderer.requestReset() }
         }
 
         val root = FrameLayout(this)
@@ -89,6 +106,14 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.CENTER_HORIZONTAL,
             ).apply { topMargin = 80 },
+        )
+        root.addView(
+            resetButton,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
+            ).apply { bottomMargin = 100 },
         )
         setContentView(root)
     }
