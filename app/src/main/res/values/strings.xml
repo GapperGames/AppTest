@@ -31,6 +31,7 @@
 
     <!-- Play tab: guided white → coloured → pocket -->
     <string name="status_play_not_calibrated">No table set up yet — switch to the ⬛ Table tab first</string>
+    <string name="status_fov_tip">Table saved ✓ You don\'t need the whole table in view now — just frame the white ball, your ball and the target pocket</string>
     <string name="ball_white">white ball</string>
     <string name="ball_coloured">ball to pot</string>
     <string name="status_pick_white">STEP 1 — tap the WHITE ball (or tap where it is if no dot appears)</string>

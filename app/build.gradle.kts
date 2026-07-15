@@ -11,8 +11,8 @@ android {
         applicationId = "com.poolsight.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "0.10-cue-snooker-spin"
+        versionCode = 11
+        versionName = "0.11-stability"
     }
 
     signingConfigs {

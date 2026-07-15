@@ -269,6 +269,11 @@ verification of P0 happens when the owner installs the first APK.
 
 ## Cross-cutting concerns tracked throughout
 
+- **Tracking stability** — the two calibration corners are low-pass filtered
+  before fitting (v0.11), so fast camera motion no longer makes the table jump;
+  a large jump (relocalisation) snaps instead of crawling. Framing guidance
+  reminds the user they only need the white ball, object ball and target pocket
+  in view — not the whole table — since the table stays world-anchored.
 - **Performance/battery** — throttled detection, freeze mode, ROI (spec §7).
 - **Testability** — geometry unit tests; vision tested on saved photos.
 - **Interfaces for upgrades** — detector (CV→ML) and renderer (Canvas→Filament)

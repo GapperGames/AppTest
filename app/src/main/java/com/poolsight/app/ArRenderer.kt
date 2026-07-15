@@ -90,6 +90,7 @@ class ArRenderer(
 
     // --- calibration state (GL thread) ---
     private val cornerAnchors = mutableListOf<Anchor>() // max 2: diagonal corners
+    private val smoothedCorners = ArrayList<Vec3>()      // low-pass filtered corners
     private var diagonalMirrored = false
     private var tableFrame: TableFrame? = null
     private var everCalibrated = false
@@ -438,17 +439,34 @@ class ArRenderer(
      * (Re)fit the table from the two diagonal anchors every frame — anchors
      * drift-correct as ARCore refines its map, and the mirror flag is applied
      * live so ⇄ Flip takes effect instantly.
+     *
+     * The two corner positions are low-pass filtered before fitting: fast
+     * camera motion makes ARCore's per-frame pose estimate jitter, and
+     * smoothing keeps the table steady instead of jumping. Corners are fixed
+     * in the world once tapped, so smoothing costs nothing but a little lag
+     * when the map relocalises.
      */
     private fun refitTableIfReady() {
         if (cornerAnchors.size < 2) {
             tableFrame = null
+            smoothedCorners.clear()
             return
         }
-        val fitted = TableFrame.fitFromDiagonal(
-            cornerAnchors[0].pose.toVec3(),
-            cornerAnchors[1].pose.toVec3(),
-            diagonalMirrored,
-        )
+        val raw = listOf(cornerAnchors[0].pose.toVec3(), cornerAnchors[1].pose.toVec3())
+        if (smoothedCorners.size != raw.size) {
+            smoothedCorners.clear()
+            smoothedCorners.addAll(raw) // first fix: snap, no lag
+        } else {
+            for (i in raw.indices) {
+                // Snap rather than crawl if the anchor jumped a long way
+                // (relocalisation) — smoothing is only for small jitter.
+                smoothedCorners[i] =
+                    if (smoothedCorners[i].distanceTo(raw[i]) > SMOOTH_SNAP_M) raw[i]
+                    else lerp(smoothedCorners[i], raw[i], TABLE_SMOOTH_ALPHA)
+            }
+        }
+
+        val fitted = TableFrame.fitFromDiagonal(smoothedCorners[0], smoothedCorners[1], diagonalMirrored)
         if (fitted == null) {
             clearCalibration()
             setTransient(appContext.getString(R.string.status_bad_diagonal))
@@ -457,14 +475,18 @@ class ArRenderer(
             tableFrame = fitted
             if (first) {
                 everCalibrated = true
+                setTransient(appContext.getString(R.string.status_fov_tip))
                 onCalibrated()
             }
         }
     }
 
+    private fun lerp(a: Vec3, b: Vec3, t: Double): Vec3 = a * (1.0 - t) + b * t
+
     private fun clearCalibration() {
         cornerAnchors.forEach { it.detach() }
         cornerAnchors.clear()
+        smoothedCorners.clear()
         tableFrame = null
         diagonalMirrored = false
         tracker.clear()
@@ -889,5 +911,7 @@ class ArRenderer(
         const val POCKET_PICK_MM = 220.0
         const val POCKET_RING_MM = 70.0
         const val CUE_SIGHT_MAX_MM = 700.0
+        const val TABLE_SMOOTH_ALPHA = 0.2  // per-frame catch-up toward the raw pose
+        const val SMOOTH_SNAP_M = 0.15       // jump farther than this → snap, don't crawl
     }
 }
