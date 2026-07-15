@@ -8,6 +8,7 @@
     <string name="btn_reset_corners">↺ Reset</string>
     <string name="btn_flip">⇄ Flip</string>
     <string name="btn_create_shot">🎯 Create shot</string>
+    <string name="btn_clear_picks">↺ Clear</string>
     <string name="btn_freeze">❄ Freeze</string>
     <string name="btn_resume">▶ Resume</string>
 
@@ -26,15 +27,23 @@
     <string name="status_table_locked_table_tab">Table locked ✓ %1$s — wrong way round? ⇄ Flip · redo? ↺ Reset · ready? go to 🎱 Play</string>
     <string name="status_table_locked_hint">Table is set — ↺ Reset to redo the corners, or switch to 🎱 Play</string>
 
-    <!-- Play tab -->
+    <!-- Play tab: guided white → coloured → pocket -->
     <string name="status_play_not_calibrated">No table set up yet — switch to the ⬛ Table tab first</string>
-    <string name="status_no_balls">Looking for balls… make sure balls are on the table and in view</string>
-    <string name="status_tap_ball">%1$d ball(s) seen — tap the one you want to pot</string>
-    <string name="status_thats_cue">That\'s the white ball — tap the ball you want to pot instead</string>
-    <string name="status_tap_pocket_next">Ball selected ✓ — now tap the target pocket</string>
-    <string name="status_press_create">Ball ✓ pocket ✓ — press 🎯 Create shot</string>
-    <string name="hint_need_selection">Pick a ball and a pocket first</string>
-    <string name="status_no_cue">Can\'t see the white ball — make sure it\'s in view</string>
+    <string name="ball_white">white ball</string>
+    <string name="ball_coloured">ball to pot</string>
+    <string name="status_pick_white">STEP 1 — tap the WHITE ball (or tap where it is if no dot appears)</string>
+    <string name="status_pick_white_none">STEP 1 — tap where the WHITE ball is (no balls detected yet — tap its spot)</string>
+    <string name="status_pick_object">STEP 2 — tap the BALL YOU WANT TO POT</string>
+    <string name="status_pick_pocket">STEP 3 — tap the POCKET you want it to go in</string>
+    <string name="status_press_create">All set ✓ — press 🎯 Create shot</string>
+    <string name="status_manual_pending">Waiting for your answer to the pop-up…</string>
+    <string name="hint_need_selection">Pick the white ball, a ball to pot, and a pocket first</string>
+
+    <!-- manual-ball fallback dialog -->
+    <string name="dialog_manual_title">No ball detected there</string>
+    <string name="dialog_manual_msg">You didn\'t tap a detected ball. Use this spot on the table as the %1$s anyway?</string>
+    <string name="dialog_yes">Use this spot</string>
+    <string name="dialog_no">Cancel</string>
 
     <!-- shot results -->
     <string name="shot_direct">Aim the white ball along the line — cut %1$d° · %2$s</string>

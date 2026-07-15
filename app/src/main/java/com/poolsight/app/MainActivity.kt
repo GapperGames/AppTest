@@ -73,6 +73,7 @@ class MainActivity : Activity() {
             this,
             onStatus = { status -> setStatus(status) },
             onCalibrated = { runOnUiThread { switchMode(UiMode.PLAY) } },
+            onManualBallOffer = { label -> runOnUiThread { showManualBallDialog(label) } },
         )
 
         surfaceView = GLSurfaceView(this).apply {
@@ -123,6 +124,8 @@ class MainActivity : Activity() {
         }
         playButtons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            addView(pillButton(getString(R.string.btn_clear_picks)) { renderer.requestClearPicks() })
+            addView(spacer(40))
             addView(pillButton(getString(R.string.btn_create_shot)) { renderer.requestShot() })
             addView(spacer(40))
             addView(freezeButton)
@@ -196,6 +199,17 @@ class MainActivity : Activity() {
 
     private fun spacer(widthPx: Int) = android.view.View(this).apply {
         layoutParams = LinearLayout.LayoutParams(widthPx, 1)
+    }
+
+    /** Fallback: user tapped empty felt — offer to use that spot as the ball. */
+    private fun showManualBallDialog(ballLabel: String) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.dialog_manual_title))
+            .setMessage(getString(R.string.dialog_manual_msg, ballLabel))
+            .setCancelable(false)
+            .setPositiveButton(getString(R.string.dialog_yes)) { _, _ -> renderer.confirmManualBall() }
+            .setNegativeButton(getString(R.string.dialog_no)) { _, _ -> renderer.cancelManualBall() }
+            .show()
     }
 
     override fun onResume() {

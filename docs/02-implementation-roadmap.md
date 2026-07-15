@@ -105,6 +105,15 @@ and stay glued as you move the phone.
 type most of the time, and the highlights sit steadily on the balls without
 much jitter.
 
+> **Lighting refinement (v0.8):** field testing showed absolute "is it white?"
+> thresholds fail under warm room lighting (the cue ball reads cream). Fixed
+> two ways: (1) the PLAY flow now has the user *explicitly* tap the white ball
+> first (white → coloured → pocket), so classification never has to guess the
+> cue; (2) a relative-whiteness score (brightest × least-saturated, compared
+> across the balls on the table, not against a fixed threshold) hints the
+> likely cue. Plus a manual-ball fallback: tapping empty felt offers "use this
+> spot anyway?" so an undetected ball never blocks a shot.
+>
 > **Implementation note (14 Jul 2026):** built as a pure-Kotlin vision core
 > (no OpenCV dependency — smaller APK, every algorithm unit-tested offline):
 > YUV frames downsampled to ~360px, cloth colour learnt per frame by median

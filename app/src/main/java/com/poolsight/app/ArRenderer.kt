@@ -22,7 +22,6 @@ import com.poolsight.geometry.ShotSolver
 import com.poolsight.geometry.TableFrame
 import com.poolsight.geometry.Vec2
 import com.poolsight.geometry.Vec3
-import com.poolsight.vision.BallClass
 import com.poolsight.vision.BallTracker
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.cos
@@ -42,10 +41,15 @@ enum class UiMode { TABLE, PLAY }
  * "Create shot" to draw the aim line / ghost ball / contact spot / path.
  * Freeze locks the overlay for taking the shot.
  */
+/** The guided pick sequence in PLAY: white ball → coloured ball → pocket. */
+enum class SelectStep { CUE, OBJECT, POCKET, READY }
+
 class ArRenderer(
     context: Context,
     private val onStatus: (String) -> Unit,
     private val onCalibrated: () -> Unit,
+    /** Called (GL thread) when a tap lands on empty felt: offer a manual ball. */
+    private val onManualBallOffer: (stepLabel: String) -> Unit,
 ) : GLSurfaceView.Renderer {
 
     @Volatile
@@ -81,6 +85,8 @@ class ArRenderer(
     private var flipRequested = false
     @Volatile
     private var shotRequestPending = false
+    @Volatile
+    private var clearPicksRequested = false
 
     // --- calibration state (GL thread) ---
     private val cornerAnchors = mutableListOf<Anchor>() // max 2: diagonal corners
@@ -95,10 +101,24 @@ class ArRenderer(
     private var trackedBalls: List<BallTracker.TrackedBall> = emptyList()
     private var lastDetectionSubmitMs = 0L
 
-    // --- shot state ---
-    private var selectedBallId: Int? = null
+    // --- shot state (guided: white → coloured → pocket) ---
+    private var cuePick: BallPick? = null
+    private var objPick: BallPick? = null
     private var selectedPocketIndex: Int? = null
     private var shotActive = false
+
+    // --- manual-ball fallback (tap empty felt) ---
+    @Volatile private var manualConfirmRequested = false
+    @Volatile private var manualCancelRequested = false
+    private var awaitingManualResponse = false
+    private var pendingManualPos: Vec2? = null
+    private var pendingManualStep: SelectStep? = null
+
+    /** A chosen ball: a live tracked ball, or a fixed spot the user vouched for. */
+    private sealed class BallPick {
+        data class Tracked(val id: Int) : BallPick()
+        data class Manual(val pos: Vec2) : BallPick()
+    }
 
     private var lastStatus = ""
     private var transientStatus: String? = null
@@ -120,6 +140,20 @@ class ArRenderer(
 
     fun requestShot() {
         shotRequestPending = true
+    }
+
+    /** Start the shot picks over (white → coloured → pocket). */
+    fun requestClearPicks() {
+        clearPicksRequested = true
+    }
+
+    /** User answered the "use this spot anyway?" dialog. */
+    fun confirmManualBall() {
+        manualConfirmRequested = true
+    }
+
+    fun cancelManualBall() {
+        manualCancelRequested = true
     }
 
     // ---- GLSurfaceView.Renderer -------------------------------------------------
@@ -158,6 +192,11 @@ class ArRenderer(
                 flipRequested = false
                 diagonalMirrored = !diagonalMirrored
             }
+            if (clearPicksRequested) {
+                clearPicksRequested = false
+                clearPicks()
+            }
+            applyManualResponse()
 
             val camera = frame.camera
             if (camera.trackingState != TrackingState.TRACKING) {
@@ -272,38 +311,107 @@ class ArRenderer(
         cornerAnchors.add(hit.createAnchor())
     }
 
-    /** Tap on the calibrated table (PLAY): pick the object ball or the pocket. */
+    /**
+     * Tap on the calibrated table (PLAY). Guided sequence:
+     *   CUE   → tap the white ball  (or empty felt → offer a manual spot)
+     *   OBJECT→ tap the ball to pot (or empty felt → offer a manual spot)
+     *   POCKET→ tap the target pocket
+     * Explicit selection means the app never has to guess which ball is
+     * white — it just believes the user, so warm lighting can't fool it.
+     */
     private fun handleSelectionTap(tap: FloatArray, table: TableFrame) {
+        if (awaitingManualResponse) return // a dialog is open; ignore taps
         val ndcX = 2f * tap[0] / viewportWidth - 1f
         val ndcY = 1f - 2f * tap[1] / viewportHeight
         val (origin, dir) = unprojectRay(ndcX, ndcY) ?: return
         val tapPos = table.ballCenterFromRay(origin, dir, gameType.ballRadiusMm, marginMm = 250.0) ?: return
 
-        // A tracked ball near the tap → object ball (pocket selection kept).
+        shotActive = false
+        when (currentStep()) {
+            SelectStep.CUE -> pickBallOrOffer(table, tapPos, SelectStep.CUE)
+            SelectStep.OBJECT -> pickBallOrOffer(table, tapPos, SelectStep.OBJECT)
+            SelectStep.POCKET -> pickPocket(table, tapPos)
+            SelectStep.READY -> {
+                // Everything chosen: let a pocket re-tap change the target.
+                pickPocket(table, tapPos)
+            }
+        }
+    }
+
+    private fun currentStep(): SelectStep = when {
+        cuePick == null -> SelectStep.CUE
+        objPick == null -> SelectStep.OBJECT
+        selectedPocketIndex == null -> SelectStep.POCKET
+        else -> SelectStep.READY
+    }
+
+    private fun pickBallOrOffer(table: TableFrame, tapPos: Vec2, step: SelectStep) {
         val ball = trackedBalls.minByOrNull { it.position.distanceTo(tapPos) }
         if (ball != null && ball.position.distanceTo(tapPos) < BALL_PICK_MM) {
-            if (ball.appearance.ballClass == BallClass.CUE) {
-                setTransient(appContext.getString(R.string.status_thats_cue))
-            } else {
-                selectedBallId = ball.id
-                shotActive = false
-            }
+            assignPick(step, BallPick.Tracked(ball.id))
             return
         }
+        // Empty felt within the table: offer a manual ball at this spot.
+        pendingManualPos = tapPos
+        pendingManualStep = step
+        awaitingManualResponse = true
+        onManualBallOffer(
+            appContext.getString(
+                if (step == SelectStep.CUE) R.string.ball_white else R.string.ball_coloured,
+            ),
+        )
+    }
 
-        // A pocket near the tap → target pocket (ball selection kept).
+    private fun pickPocket(table: TableFrame, tapPos: Vec2) {
         val pockets = table.table(gameType).pockets
-        val nearest = pockets.withIndex().minByOrNull { it.value.center.distanceTo(tapPos) }
-        if (nearest != null && nearest.value.center.distanceTo(tapPos) < POCKET_PICK_MM) {
+        val nearest = pockets.withIndex().minByOrNull { it.value.center.distanceTo(tapPos) } ?: return
+        if (nearest.value.center.distanceTo(tapPos) < POCKET_PICK_MM) {
             selectedPocketIndex = nearest.index
-            shotActive = false
-            return
         }
+    }
 
-        // Empty felt: clear everything.
-        selectedBallId = null
+    private fun assignPick(step: SelectStep, pick: BallPick) {
+        when (step) {
+            SelectStep.CUE -> cuePick = pick
+            SelectStep.OBJECT -> objPick = pick
+            else -> {}
+        }
+    }
+
+    /** Apply the user's answer to the "use this spot anyway?" dialog. */
+    private fun applyManualResponse() {
+        if (manualConfirmRequested) {
+            manualConfirmRequested = false
+            val pos = pendingManualPos
+            val step = pendingManualStep
+            if (pos != null && step != null) assignPick(step, BallPick.Manual(pos))
+            clearPending()
+        }
+        if (manualCancelRequested) {
+            manualCancelRequested = false
+            clearPending()
+        }
+    }
+
+    private fun clearPending() {
+        awaitingManualResponse = false
+        pendingManualPos = null
+        pendingManualStep = null
+    }
+
+    private fun clearPicks() {
+        cuePick = null
+        objPick = null
         selectedPocketIndex = null
         shotActive = false
+        clearPending()
+    }
+
+    /** Resolve a pick to a current table-space position, or null if it's gone. */
+    private fun resolvePick(pick: BallPick?): Vec2? = when (pick) {
+        is BallPick.Tracked -> trackedBalls.firstOrNull { it.id == pick.id }?.position
+        is BallPick.Manual -> pick.pos
+        null -> null
     }
 
     // ---- calibration --------------------------------------------------------------
@@ -343,9 +451,7 @@ class ArRenderer(
         diagonalMirrored = false
         tracker.clear()
         trackedBalls = emptyList()
-        selectedBallId = null
-        selectedPocketIndex = null
-        shotActive = false
+        clearPicks()
         frozen = false
     }
 
@@ -358,53 +464,57 @@ class ArRenderer(
         // Consume a "Create shot" press.
         if (shotRequestPending) {
             shotRequestPending = false
-            if (selectedBallId != null && selectedPocketIndex != null) {
+            if (currentStep() == SelectStep.READY) {
                 shotActive = true
             } else {
                 setTransient(appContext.getString(R.string.hint_need_selection))
             }
         }
 
-        val objectBall = selectedBallId?.let { id -> trackedBalls.firstOrNull { it.id == id } }
-        if (selectedBallId != null && objectBall == null) {
-            // Selected ball vanished (potted/lost): clear the shot.
-            selectedBallId = null
-            shotActive = false
+        // A tracked pick that vanished (potted/lost) drops back to that step.
+        if (cuePick is BallPick.Tracked && resolvePick(cuePick) == null) {
+            cuePick = null; shotActive = false
+        }
+        if (objPick is BallPick.Tracked && resolvePick(objPick) == null) {
+            objPick = null; shotActive = false
         }
 
-        // Outline the selected ball (amber ring).
-        objectBall?.let {
-            drawCircle(table, it.position, gameType.ballRadiusMm + 25.0, 1f, 0.85f, 0.2f, 0.95f)
+        val cuePos = resolvePick(cuePick)
+        val objPos = resolvePick(objPick)
+
+        // Selection outlines: white ring = cue, amber ring = object ball.
+        cuePos?.let { drawCircle(table, it, gameType.ballRadiusMm + 22.0, 1f, 1f, 1f, 0.95f) }
+        objPos?.let { drawCircle(table, it, gameType.ballRadiusMm + 22.0, 1f, 0.85f, 0.2f, 0.95f) }
+
+        if (awaitingManualResponse) {
+            return appContext.getString(R.string.status_manual_pending)
         }
-        // The selected pocket gets its highlight in drawPockets().
 
         if (!shotActive) {
-            return when {
-                objectBall == null && trackedBalls.isEmpty() ->
-                    appContext.getString(R.string.status_no_balls)
-                objectBall == null ->
-                    appContext.getString(R.string.status_tap_ball, trackedBalls.size)
-                selectedPocketIndex == null ->
-                    appContext.getString(R.string.status_tap_pocket_next)
-                else ->
-                    appContext.getString(R.string.status_press_create)
+            return when (currentStep()) {
+                SelectStep.CUE ->
+                    if (trackedBalls.isEmpty()) appContext.getString(R.string.status_pick_white_none)
+                    else appContext.getString(R.string.status_pick_white)
+                SelectStep.OBJECT -> appContext.getString(R.string.status_pick_object)
+                SelectStep.POCKET -> appContext.getString(R.string.status_pick_pocket)
+                SelectStep.READY -> appContext.getString(R.string.status_press_create)
             }
         }
 
         // --- shot is active: solve against current positions and draw ---
-        val obj = objectBall ?: return appContext.getString(R.string.status_tap_ball, trackedBalls.size)
-        val pocketIdx = selectedPocketIndex ?: return appContext.getString(R.string.status_tap_pocket_next)
-        val cue = trackedBalls.firstOrNull { it.appearance.ballClass == BallClass.CUE }
-            ?: return appContext.getString(R.string.status_no_cue)
+        if (cuePos == null || objPos == null) return appContext.getString(R.string.status_pick_white)
+        val pocketIdx = selectedPocketIndex ?: return appContext.getString(R.string.status_pick_pocket)
 
         val gameTable = table.table(gameType)
         val solver = ShotSolver(gameTable)
         val pocket = gameTable.pockets[pocketIdx]
 
-        val cueBall = Ball("cue", cue.position)
-        val objBall = Ball("obj", obj.position)
+        val cueBall = Ball("cue", cuePos)
+        val objBall = Ball("obj", objPos)
+        // Every other tracked ball is an obstacle, minus whichever ones we're
+        // using as cue/object (matched by proximity, since picks may be manual).
         val others = trackedBalls
-            .filter { it.id != obj.id && it.id != cue.id }
+            .filter { it.position.distanceTo(cuePos) > 1.0 && it.position.distanceTo(objPos) > 1.0 }
             .map { Ball(it.id.toString(), it.position) }
 
         val direct = solver.solveDirect(cueBall, objBall, pocket, others)
@@ -508,12 +618,19 @@ class ArRenderer(
         }
     }
 
-    /** Colour-coded dot per tracked ball; the cue ball gets a white ring. */
+    /** Colour-coded dot per tracked ball; a dashed hint marks the likely cue. */
     private fun drawBalls(table: TableFrame) {
         val balls = trackedBalls
         if (balls.isEmpty()) return
         val up = table.upNormal
         val lift = gameType.ballRadiusMm / 1000.0
+
+        // Relative whiteness: the brightest, least-saturated ball is most
+        // likely the cue — lighting-independent, unlike an absolute threshold.
+        // Only a hint (the user still explicitly picks white).
+        val likelyCue = if (cuePick == null) {
+            balls.maxByOrNull { it.appearance.whitenessScore }
+        } else null
 
         val position = FloatArray(3)
         for (ball in balls) {
@@ -525,8 +642,8 @@ class ArRenderer(
                 red = rgb[0], green = rgb[1], blue = rgb[2],
                 pointSizePx = 38f,
             )
-            if (ball.appearance.ballClass == BallClass.CUE) {
-                drawCircle(table, ball.position, gameType.ballRadiusMm + 12.0, 1f, 1f, 1f, 0.9f)
+            if (ball === likelyCue) {
+                drawCircle(table, ball.position, gameType.ballRadiusMm + 10.0, 0.9f, 0.9f, 0.9f, 0.7f)
             }
         }
     }

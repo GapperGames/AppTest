@@ -164,6 +164,25 @@ class BallClassifierTest {
         assertEquals(BallClass.STRIPE, result.ballClass)
         assertEquals(220f, result.hue, 2f)
     }
+
+    @Test
+    fun `relative whiteness picks the cue even under warm light`() {
+        // Under tungsten light the cue ball reads cream (some saturation, not
+        // pure white) — an ABSOLUTE white test can miss it. But relative to a
+        // red and a green ball it's still clearly the whitest.
+        fun ball(h: Float, s: Float, v: Float) =
+            BallClassifier.classify(FloatArray(50) { h }, FloatArray(50) { s }, FloatArray(50) { v }, 50)
+
+        val creamCue = ball(45f, 0.22f, 0.88f)   // warm-lit "white"
+        val redBall = ball(5f, 0.85f, 0.70f)
+        val greenBall = ball(130f, 0.80f, 0.55f)
+
+        val balls = listOf(redBall, creamCue, greenBall)
+        val likelyCue = balls.maxByOrNull { it.whitenessScore }
+        assertTrue(likelyCue === creamCue, "cream cue should score whitest")
+        assertTrue(creamCue.whitenessScore > redBall.whitenessScore)
+        assertTrue(creamCue.whitenessScore > greenBall.whitenessScore)
+    }
 }
 
 class BallTrackerTest {

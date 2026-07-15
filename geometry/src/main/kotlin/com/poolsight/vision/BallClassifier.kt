@@ -13,7 +13,19 @@ data class BallAppearance(
     val hue: Float,
     /** Display colour (0..1 RGB) for markers/overlays. */
     val displayRgb: FloatArray,
-)
+    /** Mean saturation over ALL pixels (0..1) — for relative whiteness. */
+    val meanSaturation: Float = 0f,
+    /** Mean brightness over ALL pixels (0..1) — for relative whiteness. */
+    val meanValue: Float = 0f,
+) {
+    /**
+     * How "white" this ball looks RELATIVE to others: bright and unsaturated
+     * scores high. Absolute white thresholds fail under warm lighting (a
+     * white ball under tungsten light reads cream); comparing balls against
+     * each other doesn't.
+     */
+    val whitenessScore: Float get() = meanValue * (1f - meanSaturation)
+}
 
 /**
  * Classifies a ball blob from the HSV values of its pixels. Heuristics from
@@ -35,11 +47,15 @@ object BallClassifier {
         var colored = 0
         var sumS = 0f
         var sumV = 0f
+        var sumAllS = 0f
+        var sumAllV = 0f
 
         for (i in 0 until count) {
             val h = hues[i]
             val s = sats[i]
             val v = vals[i]
+            sumAllS += s
+            sumAllV += v
             when {
                 v < DARK_MAX_VALUE -> dark++
                 s < WHITE_MAX_SATURATION && v > WHITE_MIN_VALUE -> white++
@@ -53,6 +69,8 @@ object BallClassifier {
                 }
             }
         }
+        val meanAllS = sumAllS / count
+        val meanAllV = sumAllV / count
 
         val whiteFrac = white.toFloat() / count
         val darkFrac = dark.toFloat() / count
@@ -79,7 +97,7 @@ object BallClassifier {
                 rgb,
             )
         }
-        return BallAppearance(ballClass, meanHue, rgb)
+        return BallAppearance(ballClass, meanHue, rgb, meanAllS, meanAllV)
     }
 
     const val WHITE_MAX_SATURATION = 0.28f
