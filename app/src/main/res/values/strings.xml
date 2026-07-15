@@ -7,6 +7,8 @@
     <string name="tab_play">🎱 Play</string>
     <string name="btn_reset_corners">↺ Reset</string>
     <string name="btn_flip">⇄ Flip</string>
+    <string name="btn_game_pool">🎱 Pool</string>
+    <string name="btn_game_snooker">🔴 Snooker</string>
     <string name="btn_create_shot">🎯 Create shot</string>
     <string name="btn_clear_picks">↺ Clear</string>
     <string name="btn_freeze">❄ Freeze</string>

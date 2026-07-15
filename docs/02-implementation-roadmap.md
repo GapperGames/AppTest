@@ -183,6 +183,14 @@ trustworthy.
 path drawn and checked for obstructions — verified against a few real banks on
 the table.
 
+> **Bounce-spin model (v0.10):** banks now use a cushion coefficient of
+> restitution (default 0.85, tunable) instead of a pure mirror. Working in
+> cushion-local coords the along-rail speed is preserved and the into-rail
+> speed scaled by e, so a rolling ball rebounds "long" (flatter than the
+> mirror) — the well-known real-table tendency. At e=1 it reduces exactly to
+> the mirror bounce (unit-tested both ways). Still a first-order,
+> speed-independent estimate, labelled as such.
+
 ---
 
 ## Phase 6 — Snooker mode
@@ -197,6 +205,12 @@ the table.
 
 **Done when:** on a snooker table the app identifies the colours correctly and
 gives usable aim lines for reds that aren't buried in the pack.
+
+> **Started early (v0.10):** a 🎱 Pool / 🔴 Snooker toggle on the Table tab
+> switches ball size (57.15mm ↔ 52.5mm), which feeds detection sizing and the
+> ghost-ball offset; the diagonal-fit cap was raised to a full 12ft snooker
+> table. Snooker's hard case (splitting the pack of touching reds) is still to
+> come — explicit/manual ball picking already covers it in the meantime.
 
 ---
 

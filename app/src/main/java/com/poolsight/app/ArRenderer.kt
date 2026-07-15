@@ -93,7 +93,8 @@ class ArRenderer(
     private var diagonalMirrored = false
     private var tableFrame: TableFrame? = null
     private var everCalibrated = false
-    private var gameType = GameType.POOL
+    @Volatile private var gameType = GameType.POOL
+    @Volatile private var gameTypeRequest: GameType? = null
 
     // --- ball detection ---
     private val detector = BallDetector()
@@ -147,6 +148,13 @@ class ArRenderer(
         clearPicksRequested = true
     }
 
+    /** Switch pool ⇄ snooker (changes ball size; re-detects). */
+    fun requestGameType(type: GameType) {
+        gameTypeRequest = type
+    }
+
+    val gameTypeSetting: GameType get() = gameType
+
     /** User answered the "use this spot anyway?" dialog. */
     fun confirmManualBall() {
         manualConfirmRequested = true
@@ -195,6 +203,16 @@ class ArRenderer(
             if (clearPicksRequested) {
                 clearPicksRequested = false
                 clearPicks()
+            }
+            gameTypeRequest?.let { req ->
+                gameTypeRequest = null
+                if (req != gameType) {
+                    // Ball size changed → previous detections are invalid.
+                    gameType = req
+                    tracker.clear()
+                    trackedBalls = emptyList()
+                    clearPicks()
+                }
             }
             applyManualResponse()
 
@@ -542,6 +560,15 @@ class ArRenderer(
 
     /** Aim line, ghost ball, contact spot, object path — the actual cheat. */
     private fun drawShot(table: TableFrame, cue: Ball, shot: ShotResult.Solution) {
+        // Cue-sight line: the line to lay the cue along, extended BEHIND the
+        // cue ball (opposite the aim direction), clipped to the rail. Chalk
+        // blue so it reads as "line up your cue here", distinct from the aim.
+        val back = shot.aimDirection * -1.0
+        val backLen = distanceToRail(table, cue.center, back, CUE_SIGHT_MAX_MM)
+        if (backLen > 1.0) {
+            drawTableLines(table, listOf(cue.center to (cue.center + back * backLen)), 0.42f, 0.78f, 0.9f, 0.9f, 6f)
+        }
+
         // Aim line: cue centre → ghost centre. Bold white.
         drawTableLines(table, listOf(cue.center to shot.ghost), 1f, 1f, 1f, 0.95f, 8f)
 
@@ -646,6 +673,20 @@ class ArRenderer(
                 drawCircle(table, ball.position, gameType.ballRadiusMm + 10.0, 0.9f, 0.9f, 0.9f, 0.7f)
             }
         }
+    }
+
+    /**
+     * Distance from [from] along unit [dir] until leaving the table rectangle,
+     * capped at [cap]. [from] is assumed inside the playing surface.
+     */
+    private fun distanceToRail(table: TableFrame, from: Vec2, dir: Vec2, cap: Double): Double {
+        var t = cap
+        val eps = 1e-6
+        if (dir.x > eps) t = minOf(t, (table.widthMm - from.x) / dir.x)
+        else if (dir.x < -eps) t = minOf(t, (0.0 - from.x) / dir.x)
+        if (dir.y > eps) t = minOf(t, (table.lengthMm - from.y) / dir.y)
+        else if (dir.y < -eps) t = minOf(t, (0.0 - from.y) / dir.y)
+        return t.coerceAtLeast(0.0)
     }
 
     private fun dashSegments(a: Vec2, b: Vec2, dashMm: Double = 60.0, gapMm: Double = 45.0): List<Pair<Vec2, Vec2>> {
@@ -847,5 +888,6 @@ class ArRenderer(
         const val BALL_PICK_MM = 80.0
         const val POCKET_PICK_MM = 220.0
         const val POCKET_RING_MM = 70.0
+        const val CUE_SIGHT_MAX_MM = 700.0
     }
 }

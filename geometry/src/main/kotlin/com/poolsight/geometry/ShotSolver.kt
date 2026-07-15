@@ -50,7 +50,18 @@ sealed class ShotResult {
     data class Impossible(val problem: ShotProblem, val blockingBallId: String? = null) : ShotResult()
 }
 
-class ShotSolver(private val table: Table) {
+/**
+ * @param cushionRestitution normal coefficient of restitution for bank shots
+ *   (0<e≤1). At e=1 the cushion is a perfect mirror. Below 1, the rebound is
+ *   "long": a naturally rolling ball loses some of its into-cushion speed but
+ *   keeps its along-cushion speed, so it comes off flatter than the mirror
+ *   angle. This is a first-order, speed-independent approximation of cushion
+ *   bounce/spin — good as an aid, not a physics engine.
+ */
+class ShotSolver(
+    private val table: Table,
+    private val cushionRestitution: Double = DEFAULT_CUSHION_RESTITUTION,
+) {
 
     private val r = table.ballRadius
 
@@ -70,6 +81,7 @@ class ShotSolver(private val table: Table) {
      * Solve a one-cushion bank into [pocket] off [cushion].
      * The mirror line is the cushion offset inward by one ball radius,
      * because the ball's centre rebounds one radius short of the nose.
+     * The bounce point accounts for [cushionRestitution] (bounce/spin).
      */
     fun solveBank(
         cue: Ball,
@@ -82,19 +94,8 @@ class ShotSolver(private val table: Table) {
         val mirrorA = cushion.a + offset
         val mirrorB = cushion.b + offset
 
-        val virtualPocket = reflectPointAcrossLine(pocket.center, mirrorA, mirrorB)
-
-        // The object ball must actually travel INTO the cushion: from the
-        // object ball, the virtual pocket must lie on the far side of the
-        // mirror line (opposite the inward normal).
-        val toVirtual = virtualPocket - objectBall.center
-        if ((toVirtual dot cushion.inwardNormal) >= 0.0) {
-            return ShotResult.Impossible(ShotProblem.BANK_WRONG_SIDE)
-        }
-
-        // Bounce point: where the O→virtualPocket segment crosses the mirror line.
-        val bounce = segmentLineIntersection(objectBall.center, virtualPocket, mirrorA, mirrorB)
-            ?: return ShotResult.Impossible(ShotProblem.BANK_NO_BOUNCE)
+        val bounce = bankBouncePoint(objectBall.center, pocket.center, mirrorA, mirrorB, cushion.inwardNormal)
+            ?: return ShotResult.Impossible(ShotProblem.BANK_WRONG_SIDE)
 
         // The bounce must land on the real cushion segment (not in a pocket jaw).
         val along = (mirrorB - mirrorA).normalized()
@@ -103,7 +104,8 @@ class ShotSolver(private val table: Table) {
             return ShotResult.Impossible(ShotProblem.BANK_NO_BOUNCE)
         }
 
-        val solved = solveTowards(cue, objectBall, virtualPocket, otherBalls, isBank = true, cushion = cushion.id)
+        // The cue sends the object ball toward the bounce point (first leg).
+        val solved = solveTowards(cue, objectBall, bounce, otherBalls, isBank = true, cushion = cushion.id)
         if (solved !is ShotResult.Solution) return solved
 
         // Check the second leg (bounce → real pocket) for obstructions too.
@@ -112,6 +114,42 @@ class ShotSolver(private val table: Table) {
         }
 
         return solved.copy(objectPath = listOf(objectBall.center, bounce, pocket.center))
+    }
+
+    /**
+     * The point on the mirror line where the object ball should strike the
+     * cushion so that, after a bounce with normal restitution
+     * [cushionRestitution], it reaches [target].
+     *
+     * Working in cushion-local coordinates (x along the rail, y = distance
+     * inward from the rail): the along-rail speed is preserved and the
+     * into-rail speed is scaled by e, so the along-rail travel splits as
+     *   Δx_out = D·y_target / (y_target + e·y_object)
+     * where D is the total along-rail span. At e=1 this is the exact mirror
+     * bounce; below 1 the ball comes off flatter (rebounds long).
+     *
+     * Returns null when the object or target is on/behind the rail line
+     * (no valid bank).
+     */
+    private fun bankBouncePoint(
+        obj: Vec2,
+        target: Vec2,
+        mirrorA: Vec2,
+        mirrorB: Vec2,
+        inwardNormal: Vec2,
+    ): Vec2? {
+        val along = (mirrorB - mirrorA).normalized()
+        val yObj = (obj - mirrorA) dot inwardNormal   // inward distance of the object
+        val yTgt = (target - mirrorA) dot inwardNormal // inward distance of the pocket
+        if (yObj <= Vec2.EPSILON || yTgt <= Vec2.EPSILON) return null // wrong side of rail
+
+        val xObj = (obj - mirrorA) dot along
+        val xTgt = (target - mirrorA) dot along
+        val span = xTgt - xObj
+
+        val dxOut = span * yTgt / (yTgt + cushionRestitution * yObj)
+        val xBounce = xTgt - dxOut
+        return mirrorA + along * xBounce
     }
 
     /**
@@ -214,6 +252,13 @@ class ShotSolver(private val table: Table) {
     companion object {
         /** Cuts at/beyond this are treated as unplayable rather than shown. */
         const val MAX_CUT_DEGREES = 85.0
+
+        /**
+         * Default cushion restitution for banks. Empirical: a rolling ball
+         * rebounds slightly "long" (flatter than the mirror), so a value just
+         * below 1 nudges the aim that way without over-committing. Tunable.
+         */
+        const val DEFAULT_CUSHION_RESTITUTION = 0.85
 
         /** Small tolerance so a ball exactly 2r away (touching path) doesn't flag. */
         private const val CLEARANCE_TOLERANCE = 0.5 // mm

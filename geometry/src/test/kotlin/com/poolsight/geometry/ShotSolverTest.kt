@@ -132,15 +132,18 @@ class ShotSolverTest {
 
     // ---- bank shots ---------------------------------------------------------
 
+    // A perfect-mirror solver (e=1) for the pure-reflection geometry tests.
+    private val mirrorSolver = ShotSolver(table, cushionRestitution = 1.0)
+
     @Test
-    fun `one-cushion bank obeys the reflection law at the mirror line`() {
+    fun `at e=1 a one-cushion bank obeys the reflection law`() {
         // Bank the object ball off the right cushion into the middle-left pocket.
         val cue = Ball("cue", Vec2(300.0, 400.0))
         val obj = Ball("8", Vec2(500.0, 800.0))
         val rightLower = table.cushions.first { it.id == CushionId.RIGHT_LOWER }
 
         val shot = assertIs<ShotResult.Solution>(
-            solver.solveBank(cue, obj, middleLeft, rightLower),
+            mirrorSolver.solveBank(cue, obj, middleLeft, rightLower),
         )
 
         assertTrue(shot.isBank)
@@ -163,6 +166,42 @@ class ShotSolverTest {
         val slopeOut = outgoing.y / outgoing.x
         assertEquals(slopeIn, -slopeOut, 1e-9)
         assertTrue(incoming.x > 0 && outgoing.x < 0) // in toward the rail, out away
+    }
+
+    @Test
+    fun `bounce spin (e less than 1) rebounds long - outgoing leg is flatter`() {
+        val cue = Ball("cue", Vec2(300.0, 400.0))
+        val obj = Ball("8", Vec2(500.0, 800.0))
+        val rightLower = table.cushions.first { it.id == CushionId.RIGHT_LOWER }
+        // Angle measured to the cushion (tangent): 0° = parallel to the rail,
+        // 90° = straight into it. Reflection symmetry is about this line.
+        val rail = (rightLower.b - rightLower.a).normalized()
+        fun angleToRail(a: Vec2, b: Vec2): Double = Vec2.angleBetweenDegrees(b - a, rail)
+
+        val mirror = assertIs<ShotResult.Solution>(mirrorSolver.solveBank(cue, obj, middleLeft, rightLower))
+        val spinny = assertIs<ShotResult.Solution>(
+            ShotSolver(table, cushionRestitution = 0.6).solveBank(cue, obj, middleLeft, rightLower),
+        )
+
+        val mBounce = mirror.objectPath[1]
+        val sBounce = spinny.objectPath[1]
+
+        // Perfect mirror (e=1): angle in = angle out (to the cushion).
+        assertEquals(
+            angleToRail(mirror.objectPath[0], mBounce),
+            angleToRail(mBounce, mirror.objectPath[2]),
+            1e-6,
+        )
+
+        // With spin (e<1) the outgoing leg is FLATTER (more parallel to the
+        // rail, i.e. a smaller angle) than the incoming — it rebounds long.
+        val inAngle = angleToRail(spinny.objectPath[0], sBounce)
+        val outAngle = angleToRail(sBounce, spinny.objectPath[2])
+        assertTrue(outAngle < inAngle - 1.0, "outgoing ($outAngle) should be flatter than incoming ($inAngle)")
+
+        // The ball must hit the rail sooner (toward the object side) to make
+        // that longer rebound reach the pocket.
+        assertTrue(sBounce.y < mBounce.y, "spin bounce shifts toward the object side")
     }
 
     @Test

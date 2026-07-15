@@ -145,9 +145,13 @@ class TableFrame(
 
         private data class Fit(val xEdge: Vec3, val width: Double, val yEdge: Vec3, val length: Double)
 
-        /** Plausible corner-to-corner diagonals: 6ft pool (~1.87m) to 12ft snooker (~4m). */
+        /**
+         * Plausible corner-to-corner diagonals: small 6ft pool (~1.9m) up to
+         * a full 12ft snooker table (playing surface 3569×1778mm → ~4.0m
+         * diagonal), with headroom for oversized/championship tables.
+         */
         const val MIN_DIAGONAL_M = 1.5
-        const val MAX_DIAGONAL_M = 4.5
+        const val MAX_DIAGONAL_M = 5.0
 
         /**
          * Fit a table from just TWO taps: diagonally opposite playing-surface

@@ -17,6 +17,7 @@ import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Config
 import com.google.ar.core.Session
 import com.google.ar.core.exceptions.CameraNotAvailableException
+import com.poolsight.geometry.GameType
 import com.google.ar.core.exceptions.UnavailableApkTooOldException
 import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException
@@ -121,8 +122,16 @@ class MainActivity : Activity() {
 
         // --- per-tab button rows ---
         val gap = dp(16f).toInt()
+        lateinit var gameButton: TextView
+        gameButton = pillButton(gameLabel(renderer.gameTypeSetting)) {
+            val next = if (renderer.gameTypeSetting == GameType.POOL) GameType.SNOOKER else GameType.POOL
+            renderer.requestGameType(next)
+            gameButton.text = gameLabel(next)
+        }
         tableButtons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            addView(gameButton)
+            addView(spacer(gap))
             addView(pillButton(getString(R.string.btn_reset_corners)) { renderer.requestReset() })
             addView(spacer(gap))
             addView(pillButton(getString(R.string.btn_flip)) { renderer.requestFlip() })
@@ -244,6 +253,10 @@ class MainActivity : Activity() {
     }
 
     private fun dp(value: Float): Float = value * resources.displayMetrics.density
+
+    private fun gameLabel(type: GameType): String = getString(
+        if (type == GameType.SNOOKER) R.string.btn_game_snooker else R.string.btn_game_pool,
+    )
 
     /** Fallback: user tapped empty felt — offer to use that spot as the ball. */
     private fun showManualBallDialog(ballLabel: String) {
