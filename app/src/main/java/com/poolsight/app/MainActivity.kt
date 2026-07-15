@@ -94,27 +94,37 @@ class MainActivity : Activity() {
 
         statusText = TextView(this).apply {
             text = getString(R.string.status_starting)
-            setTextColor(0xFFFFFFFF.toInt())
-            setBackgroundColor(0xAA14603F.toInt())
+            setTextColor(0xFFF6F1E2.toInt())
+            setBackgroundResource(R.drawable.bg_status)
             textSize = 15f
-            setPadding(36, 20, 36, 20)
+            gravity = Gravity.CENTER
+            letterSpacing = 0.01f
+            maxWidth = dp(560f).toInt()
+            setPadding(dp(22f).toInt(), dp(13f).toInt(), dp(22f).toInt(), dp(13f).toInt())
+            setShadowLayer(dp(4f), 0f, dp(1f), 0xCC000000.toInt())
+            elevation = dp(6f)
         }
 
-        // --- tabs ---
+        // --- tabs (segmented control) ---
         tableTab = tabView(getString(R.string.tab_table)) { switchMode(UiMode.TABLE) }
         playTab = tabView(getString(R.string.tab_play)) { switchMode(UiMode.PLAY) }
         val tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            setBackgroundResource(R.drawable.bg_tabbar)
+            val p = dp(5f).toInt()
+            setPadding(p, p, p, p)
+            elevation = dp(8f)
             addView(tableTab)
-            addView(spacer(8))
+            addView(spacer(dp(5f).toInt()))
             addView(playTab)
         }
 
         // --- per-tab button rows ---
+        val gap = dp(16f).toInt()
         tableButtons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(pillButton(getString(R.string.btn_reset_corners)) { renderer.requestReset() })
-            addView(spacer(40))
+            addView(spacer(gap))
             addView(pillButton(getString(R.string.btn_flip)) { renderer.requestFlip() })
         }
         freezeButton = pillButton(getString(R.string.btn_freeze)) {
@@ -125,21 +135,33 @@ class MainActivity : Activity() {
         playButtons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(pillButton(getString(R.string.btn_clear_picks)) { renderer.requestClearPicks() })
-            addView(spacer(40))
-            addView(pillButton(getString(R.string.btn_create_shot)) { renderer.requestShot() })
-            addView(spacer(40))
+            addView(spacer(gap))
+            addView(pillButton(getString(R.string.btn_create_shot), primary = true) { renderer.requestShot() })
+            addView(spacer(gap))
             addView(freezeButton)
         }
 
+        // --- scrims: fade the camera behind the top and bottom controls ---
+        val scrimTop = android.view.View(this).apply { setBackgroundResource(R.drawable.scrim_top) }
+        val scrimBottom = android.view.View(this).apply { setBackgroundResource(R.drawable.scrim_bottom) }
+
         val root = FrameLayout(this)
         root.addView(surfaceView)
+        root.addView(
+            scrimTop,
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(150f).toInt(), Gravity.TOP),
+        )
+        root.addView(
+            scrimBottom,
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(140f).toInt(), Gravity.BOTTOM),
+        )
         root.addView(
             tabs,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.CENTER_HORIZONTAL,
-            ).apply { topMargin = 40 },
+            ).apply { topMargin = dp(16f).toInt() },
         )
         root.addView(
             statusText,
@@ -147,7 +169,7 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.CENTER_HORIZONTAL,
-            ).apply { topMargin = 165 },
+            ).apply { topMargin = dp(80f).toInt() },
         )
         root.addView(
             tableButtons,
@@ -155,7 +177,7 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
-            ).apply { bottomMargin = 70 },
+            ).apply { bottomMargin = dp(26f).toInt() },
         )
         root.addView(
             playButtons,
@@ -163,7 +185,7 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
-            ).apply { bottomMargin = 70 },
+            ).apply { bottomMargin = dp(26f).toInt() },
         )
         setContentView(root)
 
@@ -172,34 +194,56 @@ class MainActivity : Activity() {
 
     private fun switchMode(mode: UiMode) {
         renderer.uiMode = mode
-        val on = 0xEE1E7A50.toInt()
-        val off = 0x8014603F.toInt()
-        tableTab.setBackgroundColor(if (mode == UiMode.TABLE) on else off)
-        playTab.setBackgroundColor(if (mode == UiMode.PLAY) on else off)
+        styleTab(tableTab, mode == UiMode.TABLE)
+        styleTab(playTab, mode == UiMode.PLAY)
         tableButtons.visibility = if (mode == UiMode.TABLE) android.view.View.VISIBLE else android.view.View.GONE
         playButtons.visibility = if (mode == UiMode.PLAY) android.view.View.VISIBLE else android.view.View.GONE
     }
 
+    private fun styleTab(tab: TextView, selected: Boolean) {
+        tab.setBackgroundResource(if (selected) R.drawable.bg_tab_selected else R.drawable.bg_tab_unselected)
+        tab.setTextColor(if (selected) 0xFFF6F1E2.toInt() else 0xB3F6F1E2.toInt())
+    }
+
     private fun tabView(label: String, onClick: () -> Unit) = TextView(this).apply {
         text = label
-        setTextColor(0xFFFFFFFF.toInt())
-        textSize = 17f
-        setPadding(70, 24, 70, 24)
+        setTextColor(0xFFF6F1E2.toInt())
+        textSize = 16f
+        setTypeface(typeface, android.graphics.Typeface.BOLD)
+        letterSpacing = 0.02f
+        gravity = Gravity.CENTER
+        setPadding(dp(30f).toInt(), dp(11f).toInt(), dp(30f).toInt(), dp(11f).toInt())
+        setShadowLayer(dp(3f), 0f, dp(1f), 0xB3000000.toInt())
         setOnClickListener { onClick() }
     }
 
-    private fun pillButton(label: String, onClick: () -> Unit) = TextView(this).apply {
+    private fun pillButton(label: String, primary: Boolean = false, onClick: () -> Unit) = TextView(this).apply {
         text = label
-        setTextColor(0xFFFFFFFF.toInt())
-        setBackgroundColor(0xCC14603F.toInt())
+        setTextColor(0xFFF6F1E2.toInt())
+        setBackgroundResource(if (primary) R.drawable.bg_pill_primary else R.drawable.bg_pill)
         textSize = 16f
-        setPadding(56, 28, 56, 28)
+        setTypeface(typeface, android.graphics.Typeface.BOLD)
+        letterSpacing = 0.02f
+        gravity = Gravity.CENTER
+        setPadding(dp(26f).toInt(), dp(15f).toInt(), dp(26f).toInt(), dp(15f).toInt())
+        setShadowLayer(dp(4f), 0f, dp(1f), 0xCC000000.toInt())
+        elevation = dp(8f)
+        // Coloured shadow gives the pill a soft glow (chalk for primary,
+        // felt for the rest). setOutlineSpotShadowColor is API 28+; minSdk is
+        // 26, so guard it (the S22+ is API 33 and gets the glow).
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            val glow = if (primary) 0xFF3FA6C4.toInt() else 0xFF1E7A50.toInt()
+            outlineSpotShadowColor = glow
+            outlineAmbientShadowColor = glow
+        }
         setOnClickListener { onClick() }
     }
 
     private fun spacer(widthPx: Int) = android.view.View(this).apply {
         layoutParams = LinearLayout.LayoutParams(widthPx, 1)
     }
+
+    private fun dp(value: Float): Float = value * resources.displayMetrics.density
 
     /** Fallback: user tapped empty felt — offer to use that spot as the ball. */
     private fun showManualBallDialog(ballLabel: String) {

@@ -215,6 +215,15 @@ gives usable aim lines for reds that aren't buried in the pack.
 **Done when:** you can walk up to your table, calibrate in a few seconds, and
 get trustworthy aim help on real shots without fighting the app.
 
+> **Visual pass (v0.9):** the AR overlays are drawn in GL; the on-screen chrome
+> (tabs, status, buttons) got a design pass matching the felt-and-chalk
+> identity — frosted translucent gradient panels, a segmented tab control,
+> pill buttons with depth + a coloured glow (chalk on the primary Create-shot
+> action), text shadows for legibility, and top/bottom scrims that lift the
+> controls off the camera image. Note: true live blur of the camera feed
+> behind a panel isn't feasible over a SurfaceView, so frosted translucent
+> panels + gradient scrims stand in for it.
+
 ---
 
 ## What we need from you before Phase 0

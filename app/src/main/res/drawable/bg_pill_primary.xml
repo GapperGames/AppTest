@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Primary action (Create shot): chalk-blue accent pill so it reads as
+     the main call to action against the green controls. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="30dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="#FF57C0DB"
+                android:endColor="#FF2F7D92" />
+            <stroke android:width="1dp" android:color="#80EAFBFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="30dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="#FF3FA6C4"
+                android:endColor="#FF276F86" />
+            <stroke android:width="1dp" android:color="#59DFF6FF" />
+        </shape>
+    </item>
+</selector>
