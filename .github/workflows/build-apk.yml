@@ -13,7 +13,7 @@ on:
       - "**.md"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -53,9 +53,27 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp app/android/app/build/outputs/apk/debug/app-debug.apk out/opening-reflex-debug.apk
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: opening-reflex-debug-apk
-          path: app/android/app/build/outputs/apk/debug/app-debug.apk
+          path: out/opening-reflex-debug.apk
           if-no-files-found: error
+
+      - name: Publish APK to a release (direct download link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: Opening Reflex — latest debug APK
+          body: |
+            Debug build of the Opening Reflex trainer, built by GitHub Actions.
+            Tap `opening-reflex-debug.apk` below to download and install on Android
+            (you may need to allow "install from unknown sources").
+            Built from commit ${{ github.sha }}.
+          files: out/opening-reflex-debug.apk
+          prerelease: true
