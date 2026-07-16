@@ -1,6 +1,7 @@
 import type { Color, OpeningsData } from "../openings/types";
 import type { LevelDef } from "../game/levels";
 import type { RollingStat } from "../stats/store";
+import { RebuildPanel } from "./RebuildPanel";
 
 interface HomeScreenProps {
   data: OpeningsData;
@@ -11,6 +12,8 @@ interface HomeScreenProps {
   overall: RollingStat;
   perLevel: (n: number) => RollingStat;
   engineReady: boolean;
+  isCustom: boolean;
+  onRebuilt: (data: OpeningsData) => void;
   onOpenTree: () => void;
   onOpenStats: () => void;
 }
@@ -28,6 +31,8 @@ export function HomeScreen({
   overall,
   perLevel,
   engineReady,
+  isCustom,
+  onRebuilt,
   onOpenTree,
   onOpenStats,
 }: HomeScreenProps) {
@@ -50,6 +55,8 @@ export function HomeScreen({
           <div className="muted small">last {overall.count || 0} plays</div>
         </div>
       </header>
+
+      <RebuildPanel currentUser={data.meta.user} isCustom={isCustom} onRebuilt={onRebuilt} />
 
       <div className="segmented" role="tablist" aria-label="Choose your colour">
         <button

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "tsx src/index.ts",
-    "sample": "tsx src/index.ts --pgn ../data/sample-games.pgn --user SampleUser --out ../app/public/openings.json --depth 12 --max-ply 12",
+    "sample": "tsx src/index.ts --pgn ../data/sample-games.pgn --user SampleUser --out ../app/public/openings.json --depth 12 --max-ply 24",
     "test": "node --import tsx --test src/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

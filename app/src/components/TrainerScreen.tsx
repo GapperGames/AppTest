@@ -11,10 +11,10 @@ interface TrainerScreenProps {
 }
 
 export function TrainerScreen({ view, onDrop, onQuit, onNext }: TrainerScreenProps) {
-  const lastHist = view.history[view.history.length - 1];
-  const lastCorrect = lastHist?.by === "user" ? lastHist.correct ?? null : null;
   const draggable = (view.status === "user-turn" || view.status === "reveal") && !view.busy;
   const level = LEVELS.find((l) => l.n === view.level);
+  const movesTotal = Math.round(view.maxPly / 2);
+  const movesDone = Math.min(Math.ceil(view.ply / 2), movesTotal);
 
   const bannerClass =
     view.status === "reveal"
@@ -37,7 +37,7 @@ export function TrainerScreen({ view, onDrop, onQuit, onNext }: TrainerScreenPro
           <span className="muted">{level?.short}</span>
         </div>
         <div className="progress muted">
-          {Math.min(view.ply, view.maxPly)}/{view.maxPly}
+          {movesDone}/{movesTotal}
         </div>
       </header>
 
@@ -49,7 +49,8 @@ export function TrainerScreen({ view, onDrop, onQuit, onNext }: TrainerScreenPro
           draggable={draggable}
           lastMove={view.lastMove}
           hintMove={view.hintMove}
-          lastCorrect={lastCorrect}
+          checkingSquare={view.checkingSquare}
+          resultTint={view.lastResult}
           onDrop={onDrop}
         />
       </div>

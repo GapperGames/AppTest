@@ -49,7 +49,7 @@ function parseArgs(argv: string[]): Args {
     max: Number(args.max ?? 200),
     out: args.out ?? "out/openings.json",
     depth: Number(args.depth ?? 12),
-    maxPly: Number(args["max-ply"] ?? 12),
+    maxPly: Number(args["max-ply"] ?? 24),
     multipv: Number(args.multipv ?? 3),
     threshold: Number(args.threshold ?? 30),
     timeClass: args["time-class"],
@@ -71,7 +71,7 @@ Options:
   --max <n>              Max games to fetch from chess.com (default 200).
   --out <file>           Output JSON path (default out/openings.json).
   --depth <n>            Stockfish search depth per position (default 12).
-  --max-ply <n>          Opening half-moves to analyse per game (default 12).
+  --max-ply <n>          Opening half-moves to analyse per game (default 24 = 12 moves).
   --multipv <n>          Engine lines kept per position (default 3).
   --threshold <cp>       Centipawns from best still counted "correct" (default 30).
   --time-class <class>   Filter chess.com games: bullet | blitz | rapid | daily.

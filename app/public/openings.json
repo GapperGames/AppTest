@@ -1,11 +1,11 @@
 {
   "meta": {
     "user": "SampleUser",
-    "generatedAt": "2026-07-16T10:59:30.828Z",
+    "generatedAt": "2026-07-16T12:11:12.962Z",
     "source": "local:../data/sample-games.pgn",
     "sourceGameCount": 18,
     "skippedGameCount": 0,
-    "maxPly": 12,
+    "maxPly": 24,
     "engineDepth": 12,
     "multiPv": 3,
     "correctThresholdCp": 30
@@ -448,8 +448,86 @@
                                                                             "turn": "w",
                                                                             "userToMove": true,
                                                                             "gamesReached": 1,
-                                                                            "eval": null,
-                                                                            "children": []
+                                                                            "eval": {
+                                                                              "depth": 12,
+                                                                              "lines": [
+                                                                                {
+                                                                                  "uci": "d4b3",
+                                                                                  "san": "Nb3",
+                                                                                  "cp": 17,
+                                                                                  "mate": null
+                                                                                },
+                                                                                {
+                                                                                  "uci": "d4f3",
+                                                                                  "san": "Nf3",
+                                                                                  "cp": 8,
+                                                                                  "mate": null
+                                                                                },
+                                                                                {
+                                                                                  "uci": "d4f5",
+                                                                                  "san": "Nf5",
+                                                                                  "cp": -22,
+                                                                                  "mate": null
+                                                                                }
+                                                                              ]
+                                                                            },
+                                                                            "children": [
+                                                                              {
+                                                                                "san": "Nb3",
+                                                                                "uci": "d4b3",
+                                                                                "count": 1,
+                                                                                "lossCp": 13,
+                                                                                "isBest": true,
+                                                                                "child": {
+                                                                                  "fen": "rnbqkb1r/1p3ppp/p2p1n2/4p3/4P3/1NN5/PPP1BPPP/R1BQK2R b KQkq - 1 7",
+                                                                                  "ply": 13,
+                                                                                  "turn": "b",
+                                                                                  "userToMove": false,
+                                                                                  "gamesReached": 1,
+                                                                                  "eval": {
+                                                                                    "depth": 12,
+                                                                                    "lines": [
+                                                                                      {
+                                                                                        "uci": "f8e7",
+                                                                                        "san": "Be7",
+                                                                                        "cp": -4,
+                                                                                        "mate": null
+                                                                                      },
+                                                                                      {
+                                                                                        "uci": "b8c6",
+                                                                                        "san": "Nc6",
+                                                                                        "cp": -17,
+                                                                                        "mate": null
+                                                                                      },
+                                                                                      {
+                                                                                        "uci": "c8e6",
+                                                                                        "san": "Be6",
+                                                                                        "cp": -21,
+                                                                                        "mate": null
+                                                                                      }
+                                                                                    ]
+                                                                                  },
+                                                                                  "children": [
+                                                                                    {
+                                                                                      "san": "Be7",
+                                                                                      "uci": "f8e7",
+                                                                                      "count": 1,
+                                                                                      "lossCp": 9,
+                                                                                      "isBest": true,
+                                                                                      "child": {
+                                                                                        "fen": "rnbqk2r/1p2bppp/p2p1n2/4p3/4P3/1NN5/PPP1BPPP/R1BQK2R w KQkq - 2 8",
+                                                                                        "ply": 14,
+                                                                                        "turn": "w",
+                                                                                        "userToMove": true,
+                                                                                        "gamesReached": 1,
+                                                                                        "eval": null,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    }
+                                                                                  ]
+                                                                                }
+                                                                              }
+                                                                            ]
                                                                           }
                                                                         }
                                                                       ]
@@ -870,8 +948,86 @@
                                                                             "turn": "w",
                                                                             "userToMove": true,
                                                                             "gamesReached": 1,
-                                                                            "eval": null,
-                                                                            "children": []
+                                                                            "eval": {
+                                                                              "depth": 12,
+                                                                              "lines": [
+                                                                                {
+                                                                                  "uci": "f1e2",
+                                                                                  "san": "Be2",
+                                                                                  "cp": 8,
+                                                                                  "mate": null
+                                                                                },
+                                                                                {
+                                                                                  "uci": "f1c4",
+                                                                                  "san": "Bc4",
+                                                                                  "cp": 8,
+                                                                                  "mate": null
+                                                                                },
+                                                                                {
+                                                                                  "uci": "d4c6",
+                                                                                  "san": "Nxc6",
+                                                                                  "cp": 4,
+                                                                                  "mate": null
+                                                                                }
+                                                                              ]
+                                                                            },
+                                                                            "children": [
+                                                                              {
+                                                                                "san": "Bc4",
+                                                                                "uci": "f1c4",
+                                                                                "count": 1,
+                                                                                "lossCp": 0,
+                                                                                "isBest": true,
+                                                                                "child": {
+                                                                                  "fen": "r1bqk2r/pp1pppbp/2n2np1/8/2BNP3/2N1B3/PPP2PPP/R2QK2R b KQkq - 5 7",
+                                                                                  "ply": 13,
+                                                                                  "turn": "b",
+                                                                                  "userToMove": false,
+                                                                                  "gamesReached": 1,
+                                                                                  "eval": {
+                                                                                    "depth": 12,
+                                                                                    "lines": [
+                                                                                      {
+                                                                                        "uci": "e8g8",
+                                                                                        "san": "O-O",
+                                                                                        "cp": -8,
+                                                                                        "mate": null
+                                                                                      },
+                                                                                      {
+                                                                                        "uci": "d7d6",
+                                                                                        "san": "d6",
+                                                                                        "cp": -11,
+                                                                                        "mate": null
+                                                                                      },
+                                                                                      {
+                                                                                        "uci": "e7e6",
+                                                                                        "san": "e6",
+                                                                                        "cp": -16,
+                                                                                        "mate": null
+                                                                                      }
+                                                                                    ]
+                                                                                  },
+                                                                                  "children": [
+                                                                                    {
+                                                                                      "san": "O-O",
+                                                                                      "uci": "e8g8",
+                                                                                      "count": 1,
+                                                                                      "lossCp": 0,
+                                                                                      "isBest": true,
+                                                                                      "child": {
+                                                                                        "fen": "r1bq1rk1/pp1pppbp/2n2np1/8/2BNP3/2N1B3/PPP2PPP/R2QK2R w KQ - 6 8",
+                                                                                        "ply": 14,
+                                                                                        "turn": "w",
+                                                                                        "userToMove": true,
+                                                                                        "gamesReached": 1,
+                                                                                        "eval": null,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    }
+                                                                                  ]
+                                                                                }
+                                                                              }
+                                                                            ]
                                                                           }
                                                                         }
                                                                       ]
@@ -1448,8 +1604,86 @@
                                                                             "turn": "w",
                                                                             "userToMove": true,
                                                                             "gamesReached": 1,
-                                                                            "eval": null,
-                                                                            "children": []
+                                                                            "eval": {
+                                                                              "depth": 12,
+                                                                              "lines": [
+                                                                                {
+                                                                                  "uci": "a4b3",
+                                                                                  "san": "Bb3",
+                                                                                  "cp": 13,
+                                                                                  "mate": null
+                                                                                },
+                                                                                {
+                                                                                  "uci": "d2d4",
+                                                                                  "san": "d4",
+                                                                                  "cp": -136,
+                                                                                  "mate": null
+                                                                                },
+                                                                                {
+                                                                                  "uci": "f3e5",
+                                                                                  "san": "Nxe5",
+                                                                                  "cp": -154,
+                                                                                  "mate": null
+                                                                                }
+                                                                              ]
+                                                                            },
+                                                                            "children": [
+                                                                              {
+                                                                                "san": "Bb3",
+                                                                                "uci": "a4b3",
+                                                                                "count": 1,
+                                                                                "lossCp": 5,
+                                                                                "isBest": true,
+                                                                                "child": {
+                                                                                  "fen": "r1bqk2r/2ppbppp/p1n2n2/1p2p3/4P3/1B3N2/PPPP1PPP/RNBQR1K1 b kq - 1 7",
+                                                                                  "ply": 13,
+                                                                                  "turn": "b",
+                                                                                  "userToMove": false,
+                                                                                  "gamesReached": 1,
+                                                                                  "eval": {
+                                                                                    "depth": 12,
+                                                                                    "lines": [
+                                                                                      {
+                                                                                        "uci": "d7d6",
+                                                                                        "san": "d6",
+                                                                                        "cp": -8,
+                                                                                        "mate": null
+                                                                                      },
+                                                                                      {
+                                                                                        "uci": "e8g8",
+                                                                                        "san": "O-O",
+                                                                                        "cp": -13,
+                                                                                        "mate": null
+                                                                                      },
+                                                                                      {
+                                                                                        "uci": "h7h6",
+                                                                                        "san": "h6",
+                                                                                        "cp": -31,
+                                                                                        "mate": null
+                                                                                      }
+                                                                                    ]
+                                                                                  },
+                                                                                  "children": [
+                                                                                    {
+                                                                                      "san": "d6",
+                                                                                      "uci": "d7d6",
+                                                                                      "count": 1,
+                                                                                      "lossCp": 9,
+                                                                                      "isBest": true,
+                                                                                      "child": {
+                                                                                        "fen": "r1bqk2r/2p1bppp/p1np1n2/1p2p3/4P3/1B3N2/PPPP1PPP/RNBQR1K1 w kq - 0 8",
+                                                                                        "ply": 14,
+                                                                                        "turn": "w",
+                                                                                        "userToMove": true,
+                                                                                        "gamesReached": 1,
+                                                                                        "eval": null,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    }
+                                                                                  ]
+                                                                                }
+                                                                              }
+                                                                            ]
                                                                           }
                                                                         }
                                                                       ]

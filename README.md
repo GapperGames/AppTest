@@ -46,7 +46,15 @@ npm run app:dev                  # http://localhost:5173
 The repo already ships a generated sample `openings.json`, so step 2 works even
 before you run the pipeline.
 
-### Build it from *your* chess.com games
+### Rebuild from your games — inside the app (no terminal needed)
+
+On the home screen tap **"use your chess.com games"**, type your username, pick a
+time control, and hit **Rebuild openings**. The app fetches your recent games and
+builds your opening tree on-device (nothing is uploaded), then trains you on your
+own lines. This is the easiest path on a phone. The Node pipeline below is the
+alternative for building the tree offline / with full Stockfish annotation.
+
+### Build it from *your* chess.com games (pipeline)
 
 ```bash
 npm run pipeline -- \
@@ -88,7 +96,9 @@ npm run pipeline -- --user your_handle --pgn data/sample-games.pgn \
   you won or lost the original game.
 - **Wrong move?** The best move is revealed (arrow on the board) and you play a
   best move to continue. The miss is still counted against you for that attempt.
-- Each opening runs to the first `--max-ply` half-moves (default 12).
+- Each opening runs to the first `--max-ply` half-moves (default 24 = **12 full
+  moves**). Beyond your recorded games the opponent switches to Stockfish's best
+  move, so you always play the full 12.
 - **Accuracy** is the share of first-try best moves, averaged over your last 16
   completed openings (overall and per level), stored on-device.
 
@@ -170,7 +180,7 @@ npm run build     --workspace @trainer/app
 | `--pgn <file>` | – | read a local PGN instead of the API |
 | `--max <n>` | 200 | max games to pull from chess.com |
 | `--depth <n>` | 12 | Stockfish depth per position |
-| `--max-ply <n>` | 12 | opening half-moves analysed per game |
+| `--max-ply <n>` | 24 | opening half-moves analysed per game (24 = 12 moves) |
 | `--multipv <n>` | 3 | engine lines kept per position |
 | `--threshold <cp>` | 30 | centipawns from best still "correct" |
 | `--time-class <c>` | – | `bullet` \| `blitz` \| `rapid` \| `daily` |

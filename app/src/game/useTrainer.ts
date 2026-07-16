@@ -14,6 +14,8 @@ export type TrainerStatus =
   | "reveal"
   | "complete";
 
+export type ResultTint = "correct" | "wrong" | null;
+
 export interface Feedback {
   correct: boolean;
   playedSan: string;
@@ -45,6 +47,10 @@ export interface TrainerView {
   orientation: "white" | "black";
   lastMove: { from: string; to: string } | null;
   hintMove: { from: string; to: string } | null;
+  /** Square currently being checked by the engine (shows a spinner). */
+  checkingSquare: string | null;
+  /** Colour to tint the last move square: green/red/none. */
+  lastResult: ResultTint;
   history: HistoryMove[];
   ply: number;
   maxPly: number;
@@ -57,6 +63,10 @@ export interface TrainerView {
 }
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const REVEAL_FLASH_MS = 750;
+const CORRECT_PAUSE_MS = 380;
+
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 function idleView(): TrainerView {
   return {
@@ -67,9 +77,11 @@ function idleView(): TrainerView {
     orientation: "white",
     lastMove: null,
     hintMove: null,
+    checkingSquare: null,
+    lastResult: null,
     history: [],
     ply: 0,
-    maxPly: 12,
+    maxPly: 24,
     decisions: [],
     feedback: null,
     offTree: false,
@@ -114,7 +126,7 @@ export function useTrainer(engine: StockfishEngine | null, data: OpeningsData | 
   const depth = data?.meta.engineDepth ?? 12;
   const multiPv = data?.meta.multiPv ?? 3;
   const threshold = data?.meta.correctThresholdCp ?? 30;
-  const maxPly = data?.meta.maxPly ?? 12;
+  const maxPly = data?.meta.maxPly ?? 24;
 
   const commit = useCallback((patch: Partial<TrainerView>) => {
     stateRef.current = { ...stateRef.current, ...patch };
@@ -147,6 +159,8 @@ export function useTrainer(engine: StockfishEngine | null, data: OpeningsData | 
       status: "complete",
       busy: false,
       hintMove: null,
+      checkingSquare: null,
+      lastResult: null,
       message:
         total > 0
           ? `Opening complete — ${correct}/${total} first-try best moves (${Math.round(
@@ -171,7 +185,13 @@ export function useTrainer(engine: StockfishEngine | null, data: OpeningsData | 
         finishRun();
         return;
       }
-      commit({ status: "opponent", busy: true, message: "Opponent is replying…", hintMove: null });
+      commit({
+        status: "opponent",
+        busy: true,
+        message: "Opponent is replying…",
+        hintMove: null,
+        checkingSquare: null,
+      });
 
       let uci: string | null = null;
       const node = nodeRef.current;
@@ -199,7 +219,7 @@ export function useTrainer(engine: StockfishEngine | null, data: OpeningsData | 
         finishRun();
         return;
       }
-      syncBoard({ status: "user-turn", busy: false, message: "Your move." });
+      syncBoard({ status: "user-turn", busy: false, message: "Your move.", lastResult: null });
     },
     [engine, commit, syncBoard, finishRun, depth, maxPly],
   );
@@ -256,7 +276,18 @@ export function useTrainer(engine: StockfishEngine | null, data: OpeningsData | 
       const node = nodeRef.current;
       const firstAttempt = !awaitingCorrectionRef.current;
 
-      commit({ status: "judging", busy: true, message: "Checking…", hintMove: null });
+      // Piece lands on the target square immediately; show a spinner there.
+      commit({
+        fen: fenAfter,
+        status: "judging",
+        busy: true,
+        lastMove: { from: move.from, to: move.to },
+        checkingSquare: move.to,
+        lastResult: null,
+        hintMove: null,
+        feedback: null,
+        message: "Checking…",
+      });
 
       void (async () => {
         const edge = node ? findEdge(node, uci) : undefined;
@@ -303,18 +334,42 @@ export function useTrainer(engine: StockfishEngine | null, data: OpeningsData | 
             ...stateRef.current.history,
             { san: move.san, by: "user", ply: chess.history().length, correct: firstAttempt },
           ];
-          syncBoard({ feedback });
+          // Green flash on the played square, then let the opponent reply.
+          commit({
+            status: "judging",
+            busy: true,
+            checkingSquare: null,
+            lastResult: "correct",
+            feedback,
+            message: firstAttempt ? "Best move!" : `Good — ${move.san}.`,
+          });
+          await delay(CORRECT_PAUSE_MS);
+          if (session !== sessionRef.current) return;
           await opponentTurn(session);
         } else {
+          // Red flash on the wrong square, then revert for a retry.
+          commit({
+            status: "reveal",
+            busy: true,
+            checkingSquare: null,
+            lastResult: "wrong",
+            feedback,
+            hintMove: null,
+            message: `Not best — you played ${move.san} (−${feedback.lossCp}cp).`,
+          });
+          await delay(REVEAL_FLASH_MS);
+          if (session !== sessionRef.current) return;
           chess.undo();
           awaitingCorrectionRef.current = true;
           const hint = uciParts(bestUci);
           syncBoard({
             status: "reveal",
             busy: false,
+            lastResult: null,
+            checkingSquare: null,
             feedback,
             hintMove: { from: hint.from, to: hint.to },
-            message: `Not best — engine prefers ${bestSan}. Play a best move to continue.`,
+            message: `Engine prefers ${bestSan}. Try a best move to continue.`,
           });
         }
       })();

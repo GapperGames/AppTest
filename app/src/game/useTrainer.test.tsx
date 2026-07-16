@@ -113,9 +113,12 @@ describe("useTrainer", () => {
     await tick();
     await waitFor(() => expect(result.current.view.status).toBe("reveal"));
     expect(result.current.view.feedback?.correct).toBe(false);
-    expect(result.current.view.hintMove).toEqual({ from: "g1", to: "f3" });
-    // The wrong first attempt is recorded.
+    // The wrong first attempt is recorded immediately.
     expect(result.current.view.decisions).toEqual([true, false]);
+    // After the red flash the move is reverted and the best move is revealed.
+    await waitFor(() => expect(result.current.view.hintMove).toEqual({ from: "g1", to: "f3" }), {
+      timeout: 2500,
+    });
 
     // Now play the best move to continue; it must NOT flip the decision.
     act(() => {

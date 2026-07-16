@@ -236,6 +236,94 @@ button {
 .loading-note {
   margin-top: 14px;
 }
+
+/* ---------- rebuild panel ---------- */
+.rebuild-collapsed {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+}
+.rebuild-collapsed:hover {
+  border-color: var(--line);
+  color: var(--text);
+}
+.rebuild-chev {
+  color: var(--accent);
+  font-weight: 700;
+}
+.rebuild-panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rebuild-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.rebuild-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 16px;
+  font-family: inherit;
+}
+.rebuild-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.rebuild-tc .seg {
+  padding: 8px 6px;
+  font-size: 13px;
+}
+.rebuild-go {
+  width: 100%;
+}
+.rebuild-status {
+  font-size: 13px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.rebuild-status.err {
+  color: var(--bad);
+}
+.rebuild-status.ok {
+  color: var(--ok);
+}
+.rebuild-note {
+  margin: 0;
+  line-height: 1.5;
+}
+.inline-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
 .warn-note {
   background: rgba(224, 164, 88, 0.1);
   border: 1px solid rgba(224, 164, 88, 0.3);
@@ -297,6 +385,17 @@ button {
 .board-wrap {
   flex: 1;
   min-width: 0;
+}
+.board-spinner {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 3px solid rgba(20, 24, 28, 0.35);
+  border-top-color: #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
+  animation: spin 0.7s linear infinite;
+  pointer-events: none;
+  z-index: 5;
 }
 .evalbar {
   width: 14px;

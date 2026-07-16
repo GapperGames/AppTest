@@ -14,7 +14,7 @@ import { StatsScreen } from "./components/StatsScreen";
 type Screen = "home" | "trainer" | "tree" | "stats";
 
 export default function App() {
-  const { data, error: dataError } = useOpenings();
+  const { data, error: dataError, isCustom, setData } = useOpenings();
   const { engine, ready: engineReady, error: engineError } = useEngine();
   const { view, start, playUserMove, quit, setOnRunComplete } = useTrainer(engine, data);
 
@@ -81,6 +81,8 @@ export default function App() {
           overall={overall}
           perLevel={(n) => rollingAccuracy(runs, { level: n })}
           engineReady={engineReady}
+          isCustom={isCustom}
+          onRebuilt={(d) => setData(d)}
           onOpenTree={() => setScreen("tree")}
           onOpenStats={() => setScreen("stats")}
         />
