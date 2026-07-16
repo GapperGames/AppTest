@@ -61,15 +61,17 @@ export interface RollingStat {
 }
 
 /**
- * Mean accuracy over the last `window` runs, optionally filtered to one level.
+ * Mean accuracy over the last `window` runs, optionally filtered to one level
+ * and/or one side (White/Black tracked separately).
  */
 export function rollingAccuracy(
   runs: RunRecord[],
-  opts: { level?: number; window?: number } = {},
+  opts: { level?: number; side?: "w" | "b"; window?: number } = {},
 ): RollingStat {
   const window = opts.window ?? ROLLING_WINDOW;
   let filtered = runs;
-  if (opts.level !== undefined) filtered = runs.filter((r) => r.level === opts.level);
+  if (opts.level !== undefined) filtered = filtered.filter((r) => r.level === opts.level);
+  if (opts.side !== undefined) filtered = filtered.filter((r) => r.side === opts.side);
   const recent = filtered.slice(-window);
   if (recent.length === 0) return { avg: null, count: 0 };
   const avg = recent.reduce((s, r) => s + r.accuracy, 0) / recent.length;

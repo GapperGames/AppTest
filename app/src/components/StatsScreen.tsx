@@ -1,3 +1,5 @@
+import { useState } from "react";
+import type { Color } from "../openings/types";
 import type { LevelDef } from "../game/levels";
 import { rollingAccuracy, type RunRecord, ROLLING_WINDOW } from "../stats/store";
 
@@ -13,8 +15,10 @@ function pct(v: number | null): string {
 }
 
 export function StatsScreen({ runs, levels, onBack, onClear }: StatsScreenProps) {
-  const overall = rollingAccuracy(runs);
-  const recent = runs.slice(-12).reverse();
+  const [side, setSide] = useState<Color>("w");
+  const sideRuns = runs.filter((r) => r.side === side);
+  const overall = rollingAccuracy(runs, { side });
+  const recent = sideRuns.slice(-12).reverse();
 
   return (
     <div className="screen stats-screen">
@@ -28,15 +32,26 @@ export function StatsScreen({ runs, levels, onBack, onClear }: StatsScreenProps)
         </button>
       </header>
 
+      <div className="segmented small-seg">
+        <button className={"seg" + (side === "w" ? " seg-on" : "")} onClick={() => setSide("w")}>
+          White
+        </button>
+        <button className={"seg" + (side === "b" ? " seg-on" : "")} onClick={() => setSide("b")}>
+          Black
+        </button>
+      </div>
+
       <div className="stat-hero">
         <div className="stat-hero-num">{pct(overall.avg)}</div>
-        <div className="muted">accuracy over last {overall.count || 0} plays</div>
+        <div className="muted">
+          {side === "w" ? "White" : "Black"} accuracy · last {overall.count || 0} plays
+        </div>
       </div>
 
       <h3 className="section-label">By level (last {ROLLING_WINDOW})</h3>
       <div className="level-stats">
         {levels.map((l) => {
-          const s = rollingAccuracy(runs, { level: l.n });
+          const s = rollingAccuracy(runs, { level: l.n, side });
           return (
             <div key={l.n} className="level-stat-row">
               <span className="level-stat-n">L{l.n}</span>
@@ -53,19 +68,22 @@ export function StatsScreen({ runs, levels, onBack, onClear }: StatsScreenProps)
         })}
       </div>
 
-      <h3 className="section-label">Recent plays</h3>
+      <h3 className="section-label">Recent {side === "w" ? "White" : "Black"} plays</h3>
       {recent.length === 0 ? (
-        <p className="muted small">No plays yet. Finish an opening to see it here.</p>
+        <p className="muted small">No plays yet on this colour.</p>
       ) : (
         <ul className="run-list">
           {recent.map((r, i) => (
             <li key={i} className="run-item">
-              <span className="pill">{r.side === "w" ? "White" : "Black"}</span>
-              <span className="muted small">L{r.level}</span>
+              <span className="pill">L{r.level}</span>
               <span className="run-score">
                 {r.correct}/{r.total}
               </span>
-              <span className={"run-pct " + (r.accuracy >= 0.75 ? "good" : r.accuracy >= 0.5 ? "mid" : "low")}>
+              <span
+                className={
+                  "run-pct " + (r.accuracy >= 0.75 ? "good" : r.accuracy >= 0.5 ? "mid" : "low")
+                }
+              >
                 {Math.round(r.accuracy * 100)}%
               </span>
             </li>

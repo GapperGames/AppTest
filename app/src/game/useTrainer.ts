@@ -193,23 +193,37 @@ export function useTrainer(engine: StockfishEngine | null, data: OpeningsData | 
         checkingSquare: null,
       });
 
-      let uci: string | null = null;
       const node = nodeRef.current;
       const edge = node ? pickOpponentMove(node, stateRef.current.level) : null;
+
+      // Try the reply from your games first; fall back to the engine's best
+      // move if there's no data here (or a stored move is somehow illegal).
+      let move: any = null;
       if (edge) {
-        uci = edge.uci;
-        nodeRef.current = edge.child;
-      } else {
+        try {
+          move = chess.move(uciParts(edge.uci));
+        } catch {
+          move = null;
+        }
+        nodeRef.current = move ? edge.child : null;
+      }
+      if (!move) {
         const ev = await engine.analyse(chess.fen(), depth, 1);
         if (session !== sessionRef.current) return;
-        uci = ev.lines[0]?.uci ?? null;
+        const bestUci = ev.lines[0]?.uci;
+        if (bestUci) {
+          try {
+            move = chess.move(uciParts(bestUci));
+          } catch {
+            move = null;
+          }
+        }
         nodeRef.current = null;
       }
-      if (!uci) {
+      if (!move) {
         finishRun();
         return;
       }
-      const move = chess.move(uciParts(uci));
       stateRef.current.history = [
         ...stateRef.current.history,
         { san: move.san, by: "opp", ply: chess.history().length },

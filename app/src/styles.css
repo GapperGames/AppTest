@@ -370,6 +370,16 @@ button {
   border-color: transparent;
   color: #d7f5da;
 }
+.pill-book {
+  background: rgba(87, 180, 95, 0.16);
+  border-color: rgba(87, 180, 95, 0.4);
+  color: var(--ok);
+}
+.pill-engine {
+  background: rgba(110, 168, 254, 0.14);
+  border-color: rgba(110, 168, 254, 0.35);
+  color: var(--accent-2);
+}
 .progress {
   font-family: var(--mono);
   font-size: 14px;

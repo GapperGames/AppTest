@@ -52,7 +52,9 @@ export function HomeScreen({
         </div>
         <div className="headline-acc">
           <div className="headline-acc-num">{pct(overall)}</div>
-          <div className="muted small">last {overall.count || 0} plays</div>
+          <div className="muted small">
+            {side === "w" ? "White" : "Black"} · last {overall.count || 0}
+          </div>
         </div>
       </header>
 

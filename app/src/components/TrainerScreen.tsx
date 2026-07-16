@@ -1,7 +1,6 @@
 import { Board } from "./Board";
 import { EvalBar } from "./EvalBar";
 import type { TrainerView } from "../game/useTrainer";
-import { LEVELS } from "../game/levels";
 
 interface TrainerScreenProps {
   view: TrainerView;
@@ -12,7 +11,6 @@ interface TrainerScreenProps {
 
 export function TrainerScreen({ view, onDrop, onQuit, onNext }: TrainerScreenProps) {
   const draggable = (view.status === "user-turn" || view.status === "reveal") && !view.busy;
-  const level = LEVELS.find((l) => l.n === view.level);
   const movesTotal = Math.round(view.maxPly / 2);
   const movesDone = Math.min(Math.ceil(view.ply / 2), movesTotal);
 
@@ -34,7 +32,9 @@ export function TrainerScreen({ view, onDrop, onQuit, onNext }: TrainerScreenPro
         <div className="trainer-title">
           <span className="pill">{view.side === "w" ? "White" : "Black"}</span>
           <span className="pill pill-accent">Level {view.level}</span>
-          <span className="muted">{level?.short}</span>
+          <span className={"pill " + (view.offTree ? "pill-engine" : "pill-book")}>
+            {view.offTree ? "engine" : "your book"}
+          </span>
         </div>
         <div className="progress muted">
           {movesDone}/{movesTotal}

@@ -31,6 +31,27 @@ describe("stats store", () => {
     expect(l1.avg).toBeCloseTo(0.5, 5);
   });
 
+  it("filters by side (White and Black tracked separately)", () => {
+    recordRun(run(1, "w", 1));
+    recordRun(run(1, "b", 0));
+    recordRun(run(1, "w", 0.5));
+    const white = rollingAccuracy(loadRuns(), { side: "w" });
+    const black = rollingAccuracy(loadRuns(), { side: "b" });
+    expect(white.count).toBe(2);
+    expect(white.avg).toBeCloseTo(0.75, 5);
+    expect(black.count).toBe(1);
+    expect(black.avg).toBeCloseTo(0, 5);
+  });
+
+  it("filters by level and side together", () => {
+    recordRun(run(1, "w", 1));
+    recordRun(run(1, "b", 0));
+    recordRun(run(2, "w", 0));
+    const s = rollingAccuracy(loadRuns(), { level: 1, side: "w" });
+    expect(s.count).toBe(1);
+    expect(s.avg).toBeCloseTo(1, 5);
+  });
+
   it("returns null average with no runs", () => {
     expect(rollingAccuracy([]).avg).toBeNull();
   });

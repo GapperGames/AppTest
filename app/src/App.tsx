@@ -61,7 +61,7 @@ export default function App() {
     );
   }
 
-  const overall = rollingAccuracy(runs);
+  const overall = rollingAccuracy(runs, { side });
 
   return (
     <div className="app">
@@ -75,7 +75,7 @@ export default function App() {
           onSide={setSide}
           onStart={startLevel}
           overall={overall}
-          perLevel={(n) => rollingAccuracy(runs, { level: n })}
+          perLevel={(n) => rollingAccuracy(runs, { level: n, side })}
           engineReady={engineReady}
           isCustom={isCustom}
           onRebuilt={(d) => setData(d)}
