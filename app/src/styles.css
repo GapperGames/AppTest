@@ -386,16 +386,20 @@ button {
   flex: 1;
   min-width: 0;
 }
-.board-spinner {
+/* Anchor handles centering (translate); inner element handles the spin
+   (rotate) so the two transforms never clobber each other. */
+.board-spinner-anchor {
   position: absolute;
   transform: translate(-50%, -50%);
-  border-radius: 50%;
-  border: 3px solid rgba(20, 24, 28, 0.35);
-  border-top-color: #fff;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
-  animation: spin 0.7s linear infinite;
   pointer-events: none;
   z-index: 5;
+}
+.board-spinner {
+  border-radius: 50%;
+  border: 3px solid rgba(20, 24, 28, 0.4);
+  border-top-color: #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18);
+  animation: spin 0.7s linear infinite;
 }
 .evalbar {
   width: 14px;

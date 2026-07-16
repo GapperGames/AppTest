@@ -5,7 +5,21 @@ export interface LevelDef {
   desc: string;
 }
 
-const NAMES = ["Reflex", "Instinct", "Prepared", "Booked", "Theory", "Mainline"];
+const NAMES = [
+  "Reflex",
+  "Instinct",
+  "Habit",
+  "Prepared",
+  "Booked",
+  "Schooled",
+  "Sharp",
+  "Seasoned",
+  "Theory",
+  "Mainline",
+];
+
+/** How many levels the app exposes. */
+export const LEVEL_COUNT = 10;
 
 /** Build the level table up to `count` levels (each inclusive of the previous). */
 export function buildLevels(count: number): LevelDef[] {
@@ -24,5 +38,5 @@ export function buildLevels(count: number): LevelDef[] {
   return levels;
 }
 
-/** Default table — the app narrows this to the data's real branching. */
-export const LEVELS: LevelDef[] = buildLevels(6);
+/** Full level table used across the app. */
+export const LEVELS: LevelDef[] = buildLevels(LEVEL_COUNT);

@@ -3,8 +3,7 @@ import type { Color } from "./openings/types";
 import { useOpenings } from "./data/useOpenings";
 import { useEngine } from "./engine/useEngine";
 import { useTrainer, type RunResult } from "./game/useTrainer";
-import { buildLevels } from "./game/levels";
-import { suggestedLevelCount } from "./openings/tree";
+import { buildLevels, LEVEL_COUNT } from "./game/levels";
 import { loadRuns, recordRun, clearRuns, rollingAccuracy } from "./stats/store";
 import { HomeScreen } from "./components/HomeScreen";
 import { TrainerScreen } from "./components/TrainerScreen";
@@ -22,10 +21,7 @@ export default function App() {
   const [side, setSide] = useState<Color>("w");
   const [runs, setRuns] = useState(() => loadRuns());
 
-  const levels = useMemo(
-    () => (data ? buildLevels(suggestedLevelCount(data)) : buildLevels(3)),
-    [data],
-  );
+  const levels = useMemo(() => buildLevels(LEVEL_COUNT), []);
 
   useEffect(() => {
     setOnRunComplete((r: RunResult) => {
