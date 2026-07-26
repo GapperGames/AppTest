@@ -35,6 +35,9 @@ repo → Deploy. It deploys your **default branch** though, so afterwards go to
 **Settings → Git → Production Branch**, set it to `claude/music-chords-webapp-dt8dai`, and
 redeploy. That extra step is why Netlify is listed first.
 
+Never done this before? [`docs/deploy-walkthrough.md`](docs/deploy-walkthrough.md)
+is the same five steps with every screen described.
+
 ### Then: add it to your home screen
 
 In Chrome, tap **⋮** → **Add to Home screen**. It opens fullscreen with no browser bar,
