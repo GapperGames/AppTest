@@ -1,0 +1,19 @@
+# Netlify config. No build step — the app is plain HTML, CSS and JS.
+# The three /api/* routes are served by netlify/functions/api.mjs, which
+# declares its own paths.
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Never let a song or search response be cached anywhere.
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store"
+
+# The service worker must always be revalidated or updates never land.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
