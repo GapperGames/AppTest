@@ -1,42 +1,41 @@
 # Design Pass — Chords app
 
-Read [`tech-pass.md`](./tech-pass.md) first. The design below is shaped by three findings
-from it:
+Read [`tech-pass.md`](./tech-pass.md) first, including the scope box at the top. This
+describes what was actually built.
 
-1. **BPM and duration are often missing.** They're fuzzy-matched from a second API. So they
-   are designed as *present-or-absent*, never as an error.
-2. **The key story is three-part** (written key / capo / sounding key), not one number. The
-   UI has to tell that story or it repeats UG's mistake in a new font.
-3. **Transpose and scroll are client-side and instant.** So they can be direct-manipulation
-   controls with live feedback, not forms you submit.
+---
 
-**Working prototype:** [`mockup/song-view.html`](./mockup/song-view.html) — transpose,
-capo-folding, chord diagrams and auto-scroll all actually run. Open it on your phone.
+## What the design has to do
+
+One thing, well: **get a chord sheet in front of someone holding a guitar, in the key they
+want.** Everything below follows from that posture — you are standing up, an instrument is
+in your hands, and you have one thumb and about a second.
 
 ---
 
 ## Visual direction
 
-The reference point is **a chord chart on a music stand under a warm lamp**, not a code
-editor. That drives every choice:
+The reference is **a chord chart on a music stand under a warm lamp**, not a code editor.
 
 | | |
 |---|---|
 | **Ground** | `#17140F` — warm brown-black. Dark by default because you play in dim rooms; warm because blue-black reads as "developer tool". |
 | **Text** | `#EDE6D8` warm off-white, `#9A9081` muted |
 | **Chords** | `#E8A33D` amber — the one saturated colour on the page, spent entirely on the thing your eye hunts for |
-| **Running** | `#6FA88C` green — semantic state for "scrolling", deliberately not the accent so it never competes with a chord |
+| **Errors** | `#D97A6C` — a warm clay red that belongs to the same family rather than a system red dropped in |
 | **Light theme** | warm paper `#F7F3EA`, amber darkened to `#9C5F0E` to hold contrast on a light ground |
 
-**Type.** Monospace isn't a style choice here, it's a structural requirement — chords must
-sit above the exact syllable they land on. So the chart *is* the typography, and the chrome
-stays out of its way. The one deliberate move: the title is heavy uppercase sans while the
-artist below it is lowercase mono — inverting the usual hierarchy so the header echoes the
-chart rather than fighting it.
+Both themes follow the OS, and the tokens are redefined for an explicit `data-theme`
+override so a viewer toggle wins in either direction.
 
-No webfonts. The Artifact CSP blocks font CDNs, and a silent fallback in a monospace chart
-would break chord alignment — a real functional failure, not a cosmetic one. System stacks
-only.
+**Type.** Monospace isn't a style choice, it's structural — chords must sit above the exact
+syllable they land on. So the chart *is* the typography and the chrome stays out of its
+way. The one deliberate move: the title is heavy uppercase sans while the artist below it
+is lowercase mono, inverting the usual hierarchy so the header echoes the chart rather than
+competing with it.
+
+No webfonts. A silent fallback in a monospace chart breaks chord alignment — a functional
+failure, not a cosmetic one. System stacks only.
 
 ---
 
@@ -44,132 +43,103 @@ only.
 
 ```
 ┌─────────────────────────────┐
-│  ← results  · v3 4.9★       │   collapses away on scroll
-│  PAPER LANTERNS             │   title, heavy uppercase
-│  the hollow coast           │   artist, mono lowercase
-│  [Key G] [Capo 3] [BPM 84]… │   info chips
+│  ← results          v3 4.9★ │  collapses on scroll
+│  PAPER LANTERNS             │  heavy uppercase
+│  the hollow coast           │  mono lowercase
+│  [Key G] [Capo 3] [Tuning]  │  real UG fields only
 ├─────────────────────────────┤
-│                             │
-│   G          D/F#           │   ← the hero: chart scrolls,
-│   lyric line here           │     everything else is fixed
-│                             │
+│   G          D/F#           │
+│   lyric line                │  the chart — the only
+│                             │  scrolling region
 ├─────────────────────────────┤
-│  KEY   [−][ G ][+] Capo3 ⟲  │   thumb zone
-│  SCROLL [▶] ──────── Fit    │
+│  KEY [−][ G ][+] Capo3 ⟳  A±│  thumb zone
 └─────────────────────────────┘
 ```
 
-### Why controls are docked at the bottom
+**Controls dock at the bottom.** The most consequential decision, and it's settled by
+posture rather than taste: you reach these with a guitar in your hands. Top-of-screen
+controls — where UG puts them — mean letting go of the neck.
 
-This is the single most consequential layout decision, and it's decided by posture, not
-aesthetics: **you operate these controls with a guitar in your hands.** You get one thumb
-for one second. Top-of-screen controls — which is where UG puts them — require letting go.
-Everything you touch mid-song lives in the bottom third.
-
-The header, by contrast, is pure reference material. It collapses to a slim bar as soon as
-you scroll past the first lines: once you're playing, the title has done its job and the
-screen belongs to the chart.
+**The header collapses.** Once you've scrolled past the first lines the title has done its
+job, so it shrinks to a slim bar and gives the screen back to the chart.
 
 ---
 
 ## The key control
 
-The chip reads `Key: G` at rest and `Key: G → A` once shifted, so you always know both
-where you started and where you are. Alongside it, `Capo 3` is a **toggle**, not a label.
+The chip reads `Key G` at rest and `Key G → A` once shifted, so you always know both where
+you started and where you are. `Capo 3` beside it is a **toggle**, not a label.
 
-That toggle is the actual answer to the original complaint. Pressing it folds the capo into
-the chords — G becomes B♭ — showing what genuinely *sounds*. Combined with the ± stepper
-you get the full range:
+That toggle is the real answer to the original complaint. UG tabs are user transcriptions,
+and contributors write capo-friendly shapes — a sheet showing G with capo 3 actually sounds
+in B♭, and UG shows you the G. Tapping the capo chip folds it in and shows what genuinely
+sounds. With the ± stepper on top you get:
 
-- **as written** — match the tab, capo on
-- **sounding pitch** — what the record is in, capo folded in
-- **anywhere else** — ± semitones from either of those
+- **as written** — match the sheet, capo on
+- **sounding** — what the record is in, capo folded in
+- **anywhere else** — ± semitones from either
 
-The transposition itself is exact and handles slash chords (`D/F#` shifts both halves),
-which UG's own tooling does inconsistently.
+Transposition handles slash chords on both sides (`D/F#` → `E♭/G`) and picks sharp or flat
+spelling from the destination key. It's exact, instant, and entirely client-side.
 
-**One detail worth calling out:** transposing changes chord name *lengths* — `G` → `G#` is
-a character wider — which shears the chord/lyric alignment in a naive renderer. The
-prototype positions each chord absolutely at its source column in `ch` units and nudges any
-chord that would collide with its neighbour. Alignment survives any transposition. This is
-a small thing that makes the difference between a chart that feels solid and one that feels
-broken.
-
----
-
-## Auto-scroll
-
-Speed is stated in **px/sec**, not an opaque 1–10 dial, and the motion uses sub-pixel
-accumulation so slow speeds glide rather than step.
-
-**Fit** is the feature worth building the metadata pipeline for: it divides the remaining
-scroll distance by the track duration so the chart lands exactly as the song ends. You
-press play with the record and never touch it again. It's precisely what UG charges for,
-done better — and it's the payoff for bothering with the duration lookup.
-
-The button is disabled when duration is unknown. Which leads to the rule below.
-
-### Missing data is a state, not an error
-
-BPM and duration come from fuzzy artist+title matching and will sometimes miss. So:
-
-- Absent values render as a muted italic `unknown` in their chip — present, dimmed,
-  not shouting
-- No error styling, no red, no retry prompt — nothing went *wrong*
-- Features depending on them (Fit) disable quietly rather than appearing broken
-- **Never invent a plausible number.** A wrong BPM is worse than no BPM.
+**Alignment survives it.** `G` → `G#` is a character wider, which shears chord/lyric
+alignment in a naive renderer. Chords are absolutely positioned at their source column in
+`ch` units, and a left-to-right pass nudges any that would collide. There's a test asserting
+no two chords ever overlap at any of the 23 transpositions. Small thing, but it's the
+difference between a chart that feels solid and one that feels broken.
 
 ---
 
-## Chord diagrams
+## Search
 
-Tapping any chord opens a sheet with the fingering. UG's `applicature` data gives us real
-shapes for the chords as written, free.
+One field, debounced, live. Results are **grouped by song, best-rated version first**, and
+opening one is a single tap — choosing between nine transcriptions before you can play
+anything is a chore UG imposes and this doesn't have to. A quiet `3 versions` badge expands
+the alternates for when the top pick has a bad transcription.
 
-Transposed chords have no stored shape, so the prototype derives a movable barre form and
-**says so** in the sheet footnote — along with whether the shape assumes the capo. Being
-honest about a derived shape costs one line of text and prevents someone learning a wrong
-fingering.
-
----
-
-## Search screen (not yet prototyped)
-
-Deliberately minimal — one field, results grouped by song rather than listing every
-version separately.
-
-The design opinion: **auto-pick the best version and don't make it a decision.** UG returns
-`rating` and `votes`, so pick the highest-rated non-Pro chords version and open it. Show
-`v3 · 4.9★` in the header as a quiet affordance to switch. Choosing between nine
-transcriptions before you can play a song is a chore UG imposes and we don't have to.
+Chord sheets only. Tabs, bass, ukulele and Pro versions are filtered out at the API.
 
 ---
 
-## Interaction rules
+## Designing for someone with no way to debug
 
-- **Wake lock while scrolling.** Non-negotiable — the screen sleeping mid-song is the
-  single most annoying failure in this category. Released on pause.
-- **Persist per song:** scroll speed, transpose offset, capo mode, font size. You set the
-  speed for a song once, ever.
-- **Font size control** for the chart — arm's length on a stand vs. close on a couch are
+This is the constraint that shaped the error handling, and it's unusual enough to be worth
+stating: **the person using this has no computer, no console, and no logs.** If it breaks,
+the app itself is the only thing that can explain why.
+
+So every failure is a named, plain-language state rather than a spinner that never resolves:
+
+| What happened | What it says |
+|---|---|
+| Cloudflare challenge | "Ultimate Guitar blocked us" — and that it usually clears on its own |
+| `js-store` missing | "The scraper is out of date" — UG changed their markup, code needs a fix |
+| Pro-only tab | "No chords on that page" — it only plays inside UG's own player |
+| No signal | "Couldn't reach the app's server" |
+
+Every error screen carries a **Run a check** button that hits `/api/health` and reports what
+it found. The distinction that matters is *blocked* versus *scraper broken* — one resolves
+itself, the other needs code — and no generic error message can tell those apart.
+
+---
+
+## Other decisions
+
+- **Text size control** in the bar. Arm's length on a stand and close on a couch are
   genuinely different needs.
-- Chart is the only scrolling region; header and control bar are fixed. No rubber-banding
-  the whole page while you're trying to read.
-- `prefers-reduced-motion` disables transitions. Auto-scroll is exempt — it's the feature,
-  not decoration.
+- **Hash routing**, so the Android back button steps from song to results the way it should
+  in an installed app.
+- The chart is the only scrolling region; header and bar are fixed. No rubber-banding the
+  whole page while you're trying to read.
+- `prefers-reduced-motion` disables transitions.
+- Nothing about a song is persisted — only your text size.
 
 ---
 
-## Build order
+## Not built
 
-1. **Dump one real UG payload** — everything is downstream of confirming §1 of the tech pass
-2. Scraper service + normalize + SQLite cache
-3. Chart parser and renderer (the alignment work above)
-4. Transpose + capo toggle — *this alone resolves the original complaint*
-5. Auto-scroll + wake lock
-6. Search with auto-version-pick
-7. External metadata lookup → unlocks Fit
-8. Chord diagram sheet
-9. PWA manifest + service worker + offline cache
+Cut deliberately, recorded so the reasoning survives:
 
-Steps 1–5 are a usable app. Everything after is upside.
+- **BPM, duration** — would need fuzzy-matching a second API that returns the wrong song
+  often enough to make the number untrustworthy
+- **Auto-scroll** — cut alongside them, though it depended on none of that data
+- **Chord diagrams, fingerings, tabs** — out of scope

@@ -1,10 +1,26 @@
 # Tech Pass — Chords app
 
 Goal: a personal mobile app that shows a song's chords + lyrics from Ultimate Guitar,
-in the key *you* want, with free auto-scroll and no ads.
+in the key *you* want, with no ads.
 
 This document answers one question first — **what data can we actually get?** — because
 two of the four requested metadata fields turn out not to exist where we assumed.
+
+> ### Scope decisions taken after this research
+>
+> This document is the research record. These are the calls made off the back of it.
+>
+> - **BPM, duration and auto-scroll: cut.** BPM and duration would have to be fuzzy-matched
+>   from a second API (§3), which is exactly the sort of feature that half-works. Better to
+>   not have it than to bolt it on. Auto-scroll was cut alongside them — worth recording
+>   that it needed *none* of that data and stays a small addition if it's ever wanted.
+> - **Chord diagrams, fingerings, tablature: cut.** The app reads chords and lyrics. UG's
+>   `applicature` data (§1) goes unused, and search is filtered to chord sheets only.
+> - **No caching.** §4 recommended caching parsed tabs indefinitely. Overruled in favour of
+>   scraping live on every request. Rate-limit exposure is the accepted trade — if UG starts
+>   throttling, a short TTL cache is the first mitigation, never a mirror of their data.
+> - **Deployed on Vercel**, serving the static app and the scrape endpoints from one origin,
+>   so the CORS half of §4 disappears entirely.
 
 ---
 

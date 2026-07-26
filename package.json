@@ -1,0 +1,10 @@
+{
+  "name": "chords",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chords and lyrics, in the key you want, with no ads.",
+  "engines": {
+    "node": ">=20"
+  }
+}

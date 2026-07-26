@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#17140F" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F7F3EA" media="(prefers-color-scheme: light)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Chords">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<title>Chords</title>
+
+<style>
+  :root {
+    --ground:  #17140F;
+    --surface: #211D16;
+    --raised:  #2C271D;
+    --line:    #3A3327;
+    --text:    #EDE6D8;
+    --muted:   #9A9081;
+    --faint:   #6B6455;
+    --chord:   #E8A33D;
+    --bad:     #D97A6C;
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    --chart-size: 15px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground:#F7F3EA; --surface:#FFFDF8; --raised:#EFE9DC; --line:#DDD4C2;
+      --text:#1E1A14; --muted:#6E6656; --faint:#948B78; --chord:#9C5F0E; --bad:#9E3B2B;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground:#F7F3EA; --surface:#FFFDF8; --raised:#EFE9DC; --line:#DDD4C2;
+    --text:#1E1A14; --muted:#6E6656; --faint:#948B78; --chord:#9C5F0E; --bad:#9E3B2B;
+  }
+  :root[data-theme="dark"] {
+    --ground:#17140F; --surface:#211D16; --raised:#2C271D; --line:#3A3327;
+    --text:#EDE6D8; --muted:#9A9081; --faint:#6B6455; --chord:#E8A33D; --bad:#D97A6C;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--sans);
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  .view { display: none; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+  .view.on { display: flex; }
+
+  button { font-family: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--chord); outline-offset: 2px; }
+
+  /* ================= search ================= */
+
+  .shead {
+    flex: none;
+    padding: 22px 18px 14px;
+    padding-top: calc(22px + env(safe-area-inset-top));
+  }
+  .wordmark {
+    margin: 0 0 14px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .34em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .field { position: relative; display: flex; align-items: center; }
+  .field input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 16px;
+    padding: 14px 42px 14px 14px;
+  }
+  .field input::placeholder { color: var(--faint); }
+  .field input:focus { outline: none; border-color: var(--chord); }
+  .clear {
+    position: absolute; right: 6px;
+    background: none; border: none; color: var(--faint);
+    font-size: 19px; width: 34px; height: 34px; border-radius: 6px;
+  }
+  .clear:hover { color: var(--text); }
+
+  .results { flex: 1 1 auto; overflow-y: auto; padding: 4px 10px 30px; }
+
+  .hit {
+    display: block; width: 100%; text-align: left;
+    background: none; border: none;
+    border-bottom: 1px solid var(--line);
+    padding: 13px 8px;
+    color: inherit;
+  }
+  .hit:active { background: var(--surface); }
+  .hit .t { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+  .hit .a { font-family: var(--mono); font-size: 12.5px; color: var(--chord); margin-top: 2px; }
+  .hit .m {
+    font-family: var(--mono); font-size: 11px; color: var(--faint);
+    margin-top: 5px; display: flex; gap: 9px; flex-wrap: wrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .alts { padding: 0 8px 10px 20px; border-bottom: 1px solid var(--line); }
+  .alt {
+    display: block; width: 100%; text-align: left;
+    background: none; border: none; color: var(--muted);
+    font-family: var(--mono); font-size: 12px;
+    padding: 8px 0;
+  }
+  .alt:active { color: var(--text); }
+  .more {
+    background: none; border: 1px solid var(--line); border-radius: 5px;
+    color: var(--faint); font-family: var(--mono); font-size: 10.5px;
+    padding: 3px 7px;
+  }
+  .more:active { color: var(--text); }
+
+  /* ================= song ================= */
+
+  .top {
+    flex: none;
+    padding: 14px 18px 11px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    transition: padding .2s ease;
+  }
+  .top.compact { padding-top: calc(7px + env(safe-area-inset-top)); padding-bottom: 7px; }
+
+  .crumb {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; height: 22px; margin-bottom: 8px; overflow: hidden;
+    transition: opacity .18s ease, height .2s ease, margin .2s ease;
+  }
+  .top.compact .crumb { opacity: 0; height: 0; margin-bottom: 0; }
+
+  .back, .txt {
+    background: none; border: none; color: var(--muted);
+    font-family: var(--mono); font-size: 12px; padding: 0;
+  }
+  .back:active { color: var(--text); }
+
+  h1 {
+    margin: 0; font-size: 25px; font-weight: 800;
+    letter-spacing: -.022em; line-height: 1.05;
+    text-transform: uppercase; text-wrap: balance;
+    transition: font-size .2s ease;
+  }
+  .top.compact h1 { font-size: 16px; }
+  .artist {
+    margin: 4px 0 0; font-family: var(--mono);
+    font-size: 12.5px; color: var(--chord);
+  }
+  .top.compact .artist { font-size: 11px; margin-top: 1px; }
+
+  .chips {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px;
+    transition: opacity .18s ease, height .2s ease, margin .2s ease;
+  }
+  .top.compact .chips { opacity: 0; height: 0; margin-top: 0; overflow: hidden; }
+
+  .chip {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    padding: 4px 8px; border: 1px solid var(--line); border-radius: 5px;
+    background: var(--ground);
+    font-family: var(--mono); font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip .k {
+    font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint);
+  }
+  .chip.hot { border-color: var(--chord); }
+  .chip.hot .v { color: var(--chord); }
+
+  .chart {
+    flex: 1 1 auto; overflow: auto;
+    padding: 18px 18px 34px;
+    font-family: var(--mono);
+    font-size: var(--chart-size);
+    line-height: 1.54;
+  }
+
+  .sect {
+    margin: 24px 0 8px; display: flex; align-items: center; gap: 10px;
+    font-family: var(--sans); font-size: 10px; font-weight: 700;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--faint);
+  }
+  .sect::after { content:""; flex:1; height:1px; background: var(--line); }
+  .sect:first-child { margin-top: 0; }
+
+  .cline { position: relative; height: calc(var(--chart-size) * 1.54); white-space: pre; }
+  .lline { white-space: pre; }
+  .gap { height: calc(var(--chart-size) * .8); }
+  .ch { position: absolute; top: 0; color: var(--chord); font-weight: 700; white-space: pre; }
+
+  /* ================= bottom bar ================= */
+
+  .bar {
+    flex: none;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 9px;
+  }
+  .lab {
+    font-size: 9px; font-weight: 700; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--faint); flex: none;
+  }
+  .steps {
+    display: flex; border: 1px solid var(--line); border-radius: 7px;
+    overflow: hidden; background: var(--raised);
+  }
+  .steps button {
+    border: none; background: none; color: var(--text);
+    font-family: var(--mono); font-size: 18px; width: 42px; height: 42px;
+  }
+  .steps button:active { background: var(--line); }
+  .stepval {
+    min-width: 66px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+    font-family: var(--mono); line-height: 1.12;
+  }
+  .stepval .big { font-size: 14px; font-weight: 700; color: var(--chord); }
+  .stepval .sub { font-size: 8.5px; color: var(--faint); }
+
+  .b {
+    background: var(--raised); border: 1px solid var(--line); border-radius: 7px;
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    height: 42px; padding: 0 11px; display: inline-flex; align-items: center;
+  }
+  .b:active { background: var(--line); }
+  .b[disabled] { opacity: .32; }
+  .b.on { background: var(--chord); border-color: var(--chord); color: var(--ground); font-weight: 700; }
+  .spacer { flex: 1; }
+
+  /* ================= states ================= */
+
+  .pad { padding: 40px 24px; text-align: center; }
+  .pad h2 {
+    margin: 0 0 8px; font-size: 15px; font-weight: 700;
+    letter-spacing: .02em;
+  }
+  .pad p {
+    margin: 0 auto; max-width: 34em;
+    font-size: 13.5px; line-height: 1.6; color: var(--muted);
+  }
+  .pad.err h2 { color: var(--bad); }
+  .pad code {
+    font-family: var(--mono); font-size: 11px; color: var(--faint);
+    display: block; margin-top: 14px; word-break: break-word;
+  }
+  .pad .b { margin-top: 18px; }
+
+  .spin {
+    width: 17px; height: 17px; margin: 0 auto 14px;
+    border: 2px solid var(--line); border-top-color: var(--chord);
+    border-radius: 50%; animation: sp .7s linear infinite;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ---------- search ---------- -->
+  <section class="view on" id="vSearch">
+    <div class="shead">
+      <p class="wordmark">Chords</p>
+      <div class="field">
+        <input id="q" type="search" autocomplete="off" autocorrect="off"
+               spellcheck="false" enterkeyhint="search"
+               placeholder="song or artist" aria-label="Search for a song or artist">
+        <button class="clear" id="clear" type="button" aria-label="Clear" hidden>&times;</button>
+      </div>
+    </div>
+    <div class="results" id="results">
+      <div class="pad">
+        <p>Search for a song. Results come from Ultimate&nbsp;Guitar, live.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- song ---------- -->
+  <section class="view" id="vSong">
+    <header class="top" id="top">
+      <div class="crumb">
+        <button class="back" id="back" type="button">&larr; results</button>
+        <span class="txt" id="ver"></span>
+      </div>
+      <h1 id="title"></h1>
+      <p class="artist" id="artist"></p>
+      <div class="chips" id="chips"></div>
+    </header>
+
+    <main class="chart" id="chart" tabindex="-1"></main>
+
+    <div class="bar" id="bar" hidden>
+      <span class="lab">Key</span>
+      <div class="steps">
+        <button id="down" type="button" aria-label="Down a semitone">&minus;</button>
+        <div class="stepval">
+          <span class="big" id="keyNow">–</span>
+          <span class="sub" id="keySub">original</span>
+        </div>
+        <button id="up" type="button" aria-label="Up a semitone">+</button>
+      </div>
+      <button class="b" id="capo" type="button" hidden></button>
+      <button class="b" id="reset" type="button" disabled>&#8635;</button>
+      <span class="spacer"></span>
+      <button class="b" id="smaller" type="button" aria-label="Smaller text">A&minus;</button>
+      <button class="b" id="bigger" type="button" aria-label="Larger text">A+</button>
+    </div>
+  </section>
+</div>
+
+<script src="/chart.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var IDX = CH.IDX, parse = CH.parse;
+
+  /* ---------------- state ---------------- */
+
+  var song = null, lines = [], semis = 0, concert = false;
+  var size = parseInt(localStorage.getItem("size"), 10) || 15;
+  document.documentElement.style.setProperty("--chart-size", size + "px");
+
+  function offset() { return semis + (concert && song ? song.capo : 0); }
+
+  // tonality_name can carry a mode suffix, e.g. "Am" — keep the root only.
+  function baseKey() { return CH.keyRoot(song && song.writtenKey); }
+  function minorish() { return /m$/.test((song && song.writtenKey) || ""); }
+
+  function keyNow() {
+    var root = baseKey();
+    if (!song || IDX[root] === undefined) return null;
+    var o = offset();
+    return CH.shiftNote(root, o, CH.useFlat(root, o));
+  }
+
+  /* ---------------- render chart ---------------- */
+
+  function renderChart() {
+    var o = offset();
+    var flat = CH.useFlat(baseKey() || "C", o);
+    var frag = document.createDocumentFragment();
+
+    lines.forEach(function (ln) {
+      var el;
+      if (ln.t === "sect") {
+        el = document.createElement("div");
+        el.className = "sect";
+        el.textContent = ln.text;
+      } else if (ln.t === "gap") {
+        el = document.createElement("div");
+        el.className = "gap";
+      } else if (ln.t === "lyric") {
+        el = document.createElement("div");
+        el.className = "lline";
+        el.textContent = ln.text;
+      } else {
+        el = document.createElement("div");
+        el.className = "cline";
+        CH.layout(ln.items, o, flat).forEach(function (it) {
+          var s = document.createElement("span");
+          s.className = "ch";
+          s.style.left = it.col + "ch";
+          s.textContent = it.name;
+          el.appendChild(s);
+        });
+      }
+      frag.appendChild(el);
+    });
+
+    $("chart").replaceChildren(frag);
+  }
+
+  function chip(k, v, hot) {
+    var d = document.createElement("div");
+    d.className = "chip" + (hot ? " hot" : "");
+    var a = document.createElement("span"); a.className = "k"; a.textContent = k;
+    var b = document.createElement("span"); b.className = "v"; b.textContent = v;
+    d.appendChild(a); d.appendChild(b);
+    return d;
+  }
+
+  function renderMeta() {
+    var box = $("chips");
+    box.replaceChildren();
+    var o = offset();
+    var k = keyNow();
+
+    if (k) {
+      var suffix = minorish() ? "m" : "";
+      box.appendChild(chip("Key",
+        o === 0 ? k + suffix : baseKey() + suffix + " → " + k + suffix, o !== 0));
+    }
+    if (song.capo) {
+      box.appendChild(chip("Capo", concert ? "folded in" : "fret " + song.capo, concert));
+    }
+    if (song.tuning) box.appendChild(chip("Tuning", song.tuning));
+    if (song.difficulty) box.appendChild(chip("Level", song.difficulty));
+
+    $("keyNow").textContent = k ? k + (minorish() ? "m" : "") : (semis > 0 ? "+" + semis : semis);
+    $("keySub").textContent =
+      semis === 0 ? (concert ? "sounding" : "original")
+                  : (semis > 0 ? "+" : "") + semis + " semi";
+    $("reset").disabled = (semis === 0 && !concert);
+    $("capo").classList.toggle("on", concert);
+  }
+
+  function repaint() { renderChart(); renderMeta(); }
+
+  /* ---------------- views ---------------- */
+
+  function show(v) {
+    $("vSearch").classList.toggle("on", v === "search");
+    $("vSong").classList.toggle("on", v === "song");
+  }
+
+  function busy(el, msg) {
+    el.replaceChildren();
+    var d = document.createElement("div"); d.className = "pad";
+    var s = document.createElement("div"); s.className = "spin";
+    var p = document.createElement("p"); p.textContent = msg;
+    d.appendChild(s); d.appendChild(p); el.appendChild(d);
+  }
+
+  // Errors have to explain themselves — there's no console to go and check.
+  function fail(el, info) {
+    el.replaceChildren();
+    var d = document.createElement("div"); d.className = "pad err";
+    var h = document.createElement("h2");
+    h.textContent = info.error === "blocked" ? "Ultimate Guitar blocked us"
+                  : info.error === "no_store" || info.error === "bad_json" ? "The scraper is out of date"
+                  : info.error === "not_found" ? "Not found"
+                  : info.error === "no_content" ? "No chords on that page"
+                  : "Couldn't load that";
+    var p = document.createElement("p");
+    p.textContent = info.message || "Unknown problem.";
+    d.appendChild(h); d.appendChild(p);
+
+    if (info.detail) {
+      var c = document.createElement("code");
+      c.textContent = info.detail;
+      d.appendChild(c);
+    }
+
+    var b = document.createElement("button");
+    b.className = "b"; b.type = "button"; b.textContent = "Run a check";
+    b.addEventListener("click", function () { diagnose(el); });
+    d.appendChild(b);
+    el.appendChild(d);
+  }
+
+  function diagnose(el) {
+    busy(el, "Checking Ultimate Guitar…");
+    fetch("/api/health").then(function (r) { return r.json(); }).then(function (j) {
+      el.replaceChildren();
+      var d = document.createElement("div"); d.className = "pad" + (j.ok ? "" : " err");
+      var h = document.createElement("h2");
+      h.textContent = j.ok ? "Everything looks fine" : "Found the problem";
+      var p = document.createElement("p"); p.textContent = j.summary;
+      d.appendChild(h); d.appendChild(p);
+      (j.checks || []).forEach(function (c) {
+        var code = document.createElement("code");
+        code.textContent = (c.ok ? "OK  " : "FAIL ") + c.name + " (" + c.ms + "ms) — " + c.note;
+        d.appendChild(code);
+      });
+      el.appendChild(d);
+    }).catch(function () {
+      el.replaceChildren();
+      var d = document.createElement("div"); d.className = "pad err";
+      var h = document.createElement("h2"); h.textContent = "No connection";
+      var p = document.createElement("p");
+      p.textContent = "Couldn't reach the app's own server. Check your signal.";
+      d.appendChild(h); d.appendChild(p); el.appendChild(d);
+    });
+  }
+
+  /* ---------------- search ---------------- */
+
+  var seq = 0;
+
+  function doSearch(q) {
+    var box = $("results");
+    if (q.trim().length < 2) {
+      box.replaceChildren();
+      var d = document.createElement("div"); d.className = "pad";
+      var p = document.createElement("p");
+      p.textContent = "Search for a song. Results come from Ultimate Guitar, live.";
+      d.appendChild(p); box.appendChild(d);
+      return;
+    }
+
+    var my = ++seq;
+    busy(box, "Searching…");
+
+    fetch("/api/search?q=" + encodeURIComponent(q))
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (my !== seq) return;                    // a newer search won
+        if (!res.ok) { fail(box, res.j); return; }
+        paintResults(res.j.results || []);
+      })
+      .catch(function () {
+        if (my !== seq) return;
+        fail(box, { error: "network", message: "Couldn't reach the app's server. Check your signal." });
+      });
+  }
+
+  function paintResults(rows) {
+    var box = $("results");
+    box.replaceChildren();
+
+    if (!rows.length) {
+      var d = document.createElement("div"); d.className = "pad";
+      var h = document.createElement("h2"); h.textContent = "Nothing found";
+      var p = document.createElement("p");
+      p.textContent = "No chord sheets matched. Try just the song title, or check the spelling.";
+      d.appendChild(h); d.appendChild(p); box.appendChild(d);
+      return;
+    }
+
+    rows.forEach(function (r) {
+      var b = document.createElement("button");
+      b.className = "hit"; b.type = "button";
+
+      var t = document.createElement("div"); t.className = "t"; t.textContent = r.title;
+      var a = document.createElement("div"); a.className = "a"; a.textContent = r.artist;
+      var m = document.createElement("div"); m.className = "m";
+
+      var bits = [];
+      if (r.rating) bits.push(r.rating + "★ " + r.votes);
+      if (r.key) bits.push("key " + r.key);
+      bits.forEach(function (x) {
+        var s = document.createElement("span"); s.textContent = x; m.appendChild(s);
+      });
+
+      b.appendChild(t); b.appendChild(a); b.appendChild(m);
+      b.addEventListener("click", function () { go(r.url); });
+      box.appendChild(b);
+
+      if (r.alternates && r.alternates.length) {
+        var wrap = document.createElement("div"); wrap.className = "alts"; wrap.hidden = true;
+        r.alternates.forEach(function (alt) {
+          var ab = document.createElement("button");
+          ab.className = "alt"; ab.type = "button";
+          ab.textContent = "v" + alt.version +
+            (alt.rating ? "  " + alt.rating + "★ " + alt.votes : "") +
+            (alt.key ? "  key " + alt.key : "");
+          ab.addEventListener("click", function () { go(alt.url); });
+          wrap.appendChild(ab);
+        });
+
+        var more = document.createElement("button");
+        more.className = "more"; more.type = "button";
+        more.textContent = r.versions + " versions";
+        more.addEventListener("click", function () {
+          wrap.hidden = !wrap.hidden;
+          more.textContent = wrap.hidden ? r.versions + " versions" : "hide versions";
+        });
+        m.appendChild(more);
+        box.appendChild(wrap);
+      }
+    });
+  }
+
+  /* ---------------- load a song ---------------- */
+
+  function go(url) { location.hash = "#/song/" + encodeURIComponent(url); }
+
+  function loadSong(url) {
+    show("song");
+    $("bar").hidden = true;
+    $("title").textContent = "";
+    $("artist").textContent = "";
+    $("ver").textContent = "";
+    $("chips").replaceChildren();
+    $("top").classList.remove("compact");
+    busy($("chart"), "Loading from Ultimate Guitar…");
+
+    fetch("/api/song?url=" + encodeURIComponent(url))
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { fail($("chart"), res.j); return; }
+
+        song = res.j;
+        lines = parse(song.content);
+        semis = 0;
+        concert = false;
+
+        $("title").textContent = song.title;
+        $("artist").textContent = song.artist;
+        $("ver").textContent =
+          (song.version ? "v" + song.version : "") +
+          (song.rating ? "  " + song.rating + "★ " + song.votes : "");
+
+        var capoBtn = $("capo");
+        capoBtn.hidden = !song.capo;
+        if (song.capo) capoBtn.textContent = "Capo " + song.capo;
+
+        $("bar").hidden = false;
+        repaint();
+        $("chart").scrollTop = 0;
+      })
+      .catch(function () {
+        fail($("chart"), {
+          error: "network",
+          message: "Couldn't reach the app's server. Check your signal."
+        });
+      });
+  }
+
+  /* ---------------- routing ---------------- */
+
+  function route() {
+    var h = location.hash || "";
+    var m = /^#\/song\/(.+)$/.exec(h);
+    if (m) { loadSong(decodeURIComponent(m[1])); return; }
+    show("search");
+    song = null;
+  }
+
+  window.addEventListener("hashchange", route);
+
+  /* ---------------- wiring ---------------- */
+
+  var timer = 0;
+  $("q").addEventListener("input", function (e) {
+    var v = e.target.value;
+    $("clear").hidden = !v;
+    clearTimeout(timer);
+    timer = setTimeout(function () { doSearch(v); }, 320);
+  });
+  $("q").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { clearTimeout(timer); e.target.blur(); doSearch(e.target.value); }
+  });
+  $("clear").addEventListener("click", function () {
+    $("q").value = ""; $("clear").hidden = true; $("q").focus(); doSearch("");
+  });
+
+  $("back").addEventListener("click", function () { history.back(); });
+  $("up").addEventListener("click", function () { if (semis < 11) { semis++; repaint(); } });
+  $("down").addEventListener("click", function () { if (semis > -11) { semis--; repaint(); } });
+  $("reset").addEventListener("click", function () { semis = 0; concert = false; repaint(); });
+  $("capo").addEventListener("click", function () { concert = !concert; repaint(); });
+
+  function setSize(n) {
+    size = Math.max(11, Math.min(26, n));
+    document.documentElement.style.setProperty("--chart-size", size + "px");
+    localStorage.setItem("size", size);
+  }
+  $("bigger").addEventListener("click", function () { setSize(size + 1); });
+  $("smaller").addEventListener("click", function () { setSize(size - 1); });
+
+  $("chart").addEventListener("scroll", function () {
+    $("top").classList.toggle("compact", $("chart").scrollTop > 40);
+  }, { passive: true });
+
+  route();
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
